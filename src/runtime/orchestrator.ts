@@ -7,6 +7,8 @@ import fs from 'fs/promises';
 import path from 'path';
 import { callTool } from '../integrations/mcp.js';
 import { loadConfig } from '../config.js';
+import { MemoryManager } from '../memory/manager.js';
+import type { MemoryEntry } from '../memory/types.js';
 
 type Msg = { role: 'system'|'user'|'assistant'|'tool', content: string };
 const history: Msg[] = [
@@ -41,7 +43,26 @@ let streamCancellation: AbortController | null = null;
 let transcriptMode: boolean = false;
 let backgroundMode: boolean = false;
 
+// Memory manager instance
+let memoryManager: MemoryManager | null = null;
+
 type OrchestratorEvent = { type: 'tool-start'|'tool-end'|'info'; message: string };
+
+// Initialize memory manager on first use
+async function ensureMemoryManager(): Promise<MemoryManager> {
+  if (!memoryManager) {
+    memoryManager = new MemoryManager({
+      memoryDir: '.plato/memory',
+      platoFile: 'PLATO.md',
+      maxEntries: 1000,
+      autoLoad: true,
+      autoSave: true,
+      autoSaveInterval: 30000
+    });
+    await memoryManager.initialize();
+  }
+  return memoryManager;
+}
 
 export const orchestrator = {
   async respond(input: string, onEvent?: (e: OrchestratorEvent)=>void): Promise<string> {
@@ -123,63 +144,75 @@ export const orchestrator = {
   compactHistory(keep: number) { if (keep > 0 && history.length > keep) history.splice(0, history.length - keep); },
   async getMemory(): Promise<string[]> { 
     try {
-      const memPath = path.join(process.cwd(), '.plato/memory');
-      const files = await fs.readdir(memPath).catch(() => []);
-      const memories: string[] = [];
-      
-      for (const file of files.sort()) {
-        if (file.endsWith('.json')) {
-          const content = await fs.readFile(path.join(memPath, file), 'utf8');
-          try {
-            const mem = JSON.parse(content);
-            memories.push(`[${mem.timestamp}] ${mem.type}: ${mem.content}`);
-          } catch {
-            memories.push(content);
-          }
-        }
-      }
-      
-      return memories.slice(-100); // Return last 100 memories
+      const manager = await ensureMemoryManager();
+      const memories = await manager.getAllMemories();
+      return memories
+        .slice(-100) // Return last 100 memories
+        .map(mem => `[${mem.timestamp}] ${mem.type}: ${mem.content}`);
     } catch {
       return [];
     }
   },
   async clearMemory(): Promise<void> {
     try {
-      const memPath = path.join(process.cwd(), '.plato/memory');
-      const files = await fs.readdir(memPath).catch(() => []);
-      
-      for (const file of files) {
-        if (file.endsWith('.json')) {
-          await fs.unlink(path.join(memPath, file)).catch(() => {});
-        }
-      }
+      const manager = await ensureMemoryManager();
+      await manager.clearAllMemories();
     } catch {
       // Ignore errors
     }
   },
-  async addMemory(type: string, content: string): Promise<void> {
+  async addMemory(type: MemoryEntry['type'], content: string): Promise<void> {
     try {
-      const memPath = path.join(process.cwd(), '.plato/memory');
-      await fs.mkdir(memPath, { recursive: true });
-      
+      const manager = await ensureMemoryManager();
       const timestamp = new Date().toISOString();
       const id = `${Date.now()}-${Math.random().toString(36).substring(2, 9)}`;
-      const memory = { id, type, content, timestamp };
       
-      await fs.writeFile(
-        path.join(memPath, `${id}.json`),
-        JSON.stringify(memory, null, 2),
-        'utf8'
-      );
-      
-      // Keep only last 1000 memories
-      const files = await fs.readdir(memPath);
-      const jsonFiles = files.filter(f => f.endsWith('.json')).sort();
-      if (jsonFiles.length > 1000) {
-        const toDelete = jsonFiles.slice(0, jsonFiles.length - 1000);
-        for (const file of toDelete) {
-          await fs.unlink(path.join(memPath, file)).catch(() => {});
+      await manager.addMemory({
+        id,
+        type,
+        content,
+        timestamp
+      });
+    } catch {
+      // Ignore errors
+    }
+  },
+  async getProjectContext(): Promise<string> {
+    try {
+      const manager = await ensureMemoryManager();
+      return await manager.getProjectContext();
+    } catch {
+      return '';
+    }
+  },
+  async updateProjectContext(content: string): Promise<void> {
+    try {
+      const manager = await ensureMemoryManager();
+      await manager.updateProjectContext(content);
+    } catch {
+      // Ignore errors
+    }
+  },
+  async saveSession(): Promise<void> {
+    try {
+      const manager = await ensureMemoryManager();
+      await manager.saveSession({
+        startTime: new Date().toISOString(),
+        commands: history.filter(m => m.role === 'user').map(m => m.content).slice(-100),
+        context: history.slice(-10).map(m => `${m.role}: ${m.content.substring(0, 200)}...`).join('\n')
+      });
+    } catch {
+      // Ignore errors
+    }
+  },
+  async restoreSession(): Promise<void> {
+    try {
+      const manager = await ensureMemoryManager();
+      const session = await manager.restoreSession();
+      if (session) {
+        // Restore last context if available
+        if (session.context) {
+          history.push({ role: 'system', content: `[Restored session context from ${session.startTime}]` });
         }
       }
     } catch {

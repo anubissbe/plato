@@ -261,8 +261,9 @@ export async function hasCustomCommands(): Promise<boolean> {
 /**
  * Export all custom commands and integration functions
  */
-export {
+export type {
   CustomCommand,
   SlashCommand,
-  CustomCommandLoader,
 } from './types.js';
+
+export { CustomCommandLoader } from './loader.js';
