@@ -1,5 +1,5 @@
 import http from 'http';
-import { chatCompletions, chatStream } from '../providers/chat.js';
+import { chatCompletions, chatStream } from '../providers/chat_fallback.js';
 
 let server: http.Server | null = null;
 

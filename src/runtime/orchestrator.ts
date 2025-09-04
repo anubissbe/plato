@@ -1,4 +1,4 @@
-import { chatCompletions, chatStream } from '../providers/chat.js';
+import { chatCompletions, chatStream } from '../providers/chat_fallback.js';
 import { runHooks } from '../tools/hooks.js';
 import fs from 'fs/promises';
 import { checkPermission } from '../tools/permissions.js';

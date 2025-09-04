@@ -40,7 +40,8 @@ function App() {
       exit();
       return;
     }
-    if (key.backspace) setInput(s => s.slice(0, -1));
+    // Backspace handling: support DEL (0x7F), BS (0x08), and Ctrl-H
+    if (inputKey === '\u007F' || inputKey === '\b' || (key.ctrl && inputKey.toLowerCase() === 'h')) { setInput(s => s.slice(0, -1)); return; }
     else if (key.leftArrow || key.rightArrow || key.upArrow || key.downArrow) {
       // ignore
     } else setInput(s => s + inputKey);
