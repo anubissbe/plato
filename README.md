@@ -1,5 +1,6 @@
 # Plato
 
+[![CI](https://github.com/anubissbe/plato/actions/workflows/ci.yml/badge.svg)](https://github.com/anubissbe/plato/actions/workflows/ci.yml)
 [![Version](https://img.shields.io/badge/version-1.0.0-blue.svg)](CHANGELOG.md)
 [![Open Issues](https://img.shields.io/github/issues/anubissbe/plato)](https://github.com/anubissbe/plato/issues)
 [![Last Commit](https://img.shields.io/github/last-commit/anubissbe/plato)](https://github.com/anubissbe/plato/commits/main)
@@ -40,6 +41,11 @@ Plato expects the assistant to emit a single fenced JSON code block to request t
 - Permissions enforced; results appended; assistant continues streaming
 
 See Verification Guide for a full walkthrough.
+
+## Demo
+Add your short GIF at `docs/assets/plato-demo.gif` and it will render here:
+
+![Plato TUI demo](docs/assets/plato-demo.gif)
 
 ## Verification Guide
 See `docs/verification.md` to test Copilot login and an end-to-end tool_call using the included mock MCP server.
