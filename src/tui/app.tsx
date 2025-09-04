@@ -61,6 +61,42 @@ function App() {
     return () => { /* @ts-ignore */ stdin.off?.('data', onData); };
   }, [stdin]);
 
+  // Process-level stdin capture when /keydebug is armed (works even if Ink stdin misses it)
+  useEffect(() => {
+    if (!keyDebug) return;
+    const ps = process.stdin as any;
+    const restore: { raw?: boolean } = {};
+    try {
+      if (ps.setRawMode) {
+        restore.raw = (ps as any).isRaw;
+        ps.setRawMode(true);
+      }
+      if (ps.resume) ps.resume();
+    } catch {}
+    const onDataProc = (data: Buffer) => {
+      const bytes = Array.from(data.values());
+      const hex = bytes.map(b=>b.toString(16).padStart(2,'0')).join(' ');
+      const dec = bytes.join(' ');
+      const names = bytes.map(b => {
+        if (b===0x7f) return 'DEL';
+        if (b===0x08) return 'BS';
+        if (b===0x1b) return 'ESC';
+        if (b===0x0d) return 'CR';
+        if (b===0x0a) return 'LF';
+        if (b===0x09) return 'TAB';
+        const ch = String.fromCharCode(b);
+        return b < 32 ? `^${String.fromCharCode(b+64)}` : ch;
+      }).join(' ');
+      setLines(prev=>prev.concat(`keydebug(proc): dec=[${dec}] hex=[${hex}] names=[${names}]`));
+      if (bytes.includes(0x7f) || bytes.includes(0x08)) setKeyDebug(false);
+    };
+    ps.on('data', onDataProc);
+    return () => {
+      try { ps.off?.('data', onDataProc); } catch {}
+      try { if (ps.setRawMode && restore.raw === false) ps.setRawMode(false); } catch {}
+    };
+  }, [keyDebug]);
+
   useInput((inputKey, key) => {
     if (confirm) {
       // simple confirm: y/n
