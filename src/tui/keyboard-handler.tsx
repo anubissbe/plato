@@ -53,9 +53,18 @@ export function App() {
   const keyboardStateRef = useRef(keyboardState);
   keyboardStateRef.current = keyboardState;
 
-  // Initialize configuration and Git status
+  // Initialize configuration, Git status, and restore session
   useEffect(() => { 
-    (async () => setCfg(await loadConfig()))(); 
+    (async () => {
+      setCfg(await loadConfig());
+      // Auto-restore session on startup
+      await orchestrator.restoreSession();
+      // Load project context if available
+      const context = await orchestrator.getProjectContext();
+      if (context) {
+        setLines(prev => [...prev, '', '✓ Loaded project context from PLATO.md']);
+      }
+    })(); 
   }, []);
 
   useEffect(() => {
@@ -409,6 +418,11 @@ export function App() {
       return;
     }
 
+    if (command === '/memory') {
+      await handleMemoryCommand(args);
+      return;
+    }
+
     // Default handling for unimplemented commands
     setLines(prev => prev.concat(`(command) ${text}`));
   };
@@ -550,10 +564,104 @@ export function App() {
     }
   };
 
+  // Memory command handler
+  const handleMemoryCommand = async (subCommand?: string) => {
+    try {
+      const parts = subCommand?.split(' ') || [];
+      const action = parts[0] || 'list';
+      const rest = parts.slice(1).join(' ');
+
+      switch (action) {
+        case 'list':
+        case 'show': {
+          const memories = await orchestrator.getMemory();
+          if (memories.length === 0) {
+            setLines(prev => prev.concat('📝 No memories stored yet'));
+          } else {
+            setLines(prev => prev.concat('📝 Recent memories:', ...memories.slice(-20)));
+          }
+          break;
+        }
+        
+        case 'clear':
+        case 'reset': {
+          await orchestrator.clearMemory();
+          setLines(prev => prev.concat('✅ Memory cleared'));
+          break;
+        }
+        
+        case 'add': {
+          if (rest) {
+            await orchestrator.addMemory('custom', rest);
+            setLines(prev => prev.concat(`✅ Added memory: ${rest}`));
+          } else {
+            setLines(prev => prev.concat('📝 Use: /memory add <content>'));
+          }
+          break;
+        }
+        
+        case 'context':
+        case 'plato': {
+          const context = await orchestrator.getProjectContext();
+          if (context) {
+            setLines(prev => prev.concat('📄 PLATO.md content:', ...context.split('\n')));
+          } else {
+            setLines(prev => prev.concat('📝 No PLATO.md found. Create one with project context.'));
+          }
+          break;
+        }
+        
+        case 'update-context': {
+          if (rest) {
+            await orchestrator.updateProjectContext(rest);
+            setLines(prev => prev.concat(`✅ Updated PLATO.md`));
+          } else {
+            setLines(prev => prev.concat('📝 Use: /memory update-context <content>'));
+          }
+          break;
+        }
+        
+        case 'save-session': {
+          await orchestrator.saveSession();
+          setLines(prev => prev.concat('✅ Session saved'));
+          break;
+        }
+        
+        case 'restore-session': {
+          await orchestrator.restoreSession();
+          setLines(prev => prev.concat('✅ Session restored'));
+          break;
+        }
+        
+        case 'help': {
+          setLines(prev => prev.concat(
+            '📝 Memory commands:',
+            '  /memory list         - Show recent memories',
+            '  /memory clear        - Clear all memories',
+            '  /memory add <text>   - Add custom memory',
+            '  /memory context      - Show PLATO.md content',
+            '  /memory update-context <text> - Update PLATO.md',
+            '  /memory save-session - Save current session',
+            '  /memory restore-session - Restore last session'
+          ));
+          break;
+        }
+        
+        default:
+          setLines(prev => prev.concat(`❓ Unknown memory command: ${action}. Use '/memory help' for options.`));
+      }
+    } catch (e: any) {
+      setLines(prev => prev.concat(`❌ Memory command failed: ${e?.message || e}`));
+    }
+  };
+
   // Handle regular messages
   const handleRegularMessage = async (text: string) => {
     setLines(prev => prev.concat(`You: ${text}`));
     setStatus('Thinking...');
+    
+    // Auto-save message to memory
+    await orchestrator.addMemory('command', text);
     
     let acc = '';
     try {
