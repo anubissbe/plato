@@ -266,6 +266,9 @@ async function maybeAutoApply(patch: string | null, onEvent?: (e: OrchestratorEv
   }
   try {
     await applyPatch(patch);
+    if (details.length === 1 && details[0].newFile) {
+      onEvent?.({ type: 'info', message: `● I'll create a file called ${details[0].file}.` });
+    }
     for (const d of details) {
       onEvent?.({ type: 'info', message: `  ⎿  Wrote ${d.addedLines} lines to ${d.file}` });
       if (d.newFile && d.preview.length) {

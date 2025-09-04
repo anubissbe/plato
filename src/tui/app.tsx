@@ -534,12 +534,19 @@ function App() {
     try {
       await orchestrator.respondStream(text, (delta) => {
         acc += delta;
+        // Filter out raw patch blocks in Claude parity mode (autoApply on)
+        let display = acc;
+        if (cfg?.editing?.autoApply === 'on') {
+          display = display.replace(/\*\*\* Begin Patch[\s\S]*?\*\*\* End Patch/g, '');
+          display = display.replace(/```[\s\S]*?```/g, '').trim();
+        }
+        if (!display) return;
         // show last assistant line streaming
         setLines(prev => {
           const copy = prev.slice();
           // ensure streaming line exists
           if (!copy.length || !copy[copy.length-1].startsWith('Plato: ')) copy.push('Plato: ');
-          copy[copy.length-1] = 'Plato: ' + acc;
+          copy[copy.length-1] = 'Plato: ' + display;
           return copy;
         });
       }, (evt) => {
