@@ -62,7 +62,14 @@ function App() {
     if (inputKey === '\u007F' || inputKey === '\b' || (key.ctrl && inputKey.toLowerCase() === 'h')) { setInput(s => s.slice(0, -1)); return; }
     else if (key.leftArrow || key.rightArrow || key.upArrow || key.downArrow) {
       // ignore
-    } else setInput(s => s + inputKey);
+    } else {
+      const code = inputKey && inputKey.length === 1 ? inputKey.charCodeAt(0) : NaN;
+      if (!Number.isNaN(code)) {
+        if (code < 32 || code === 127) return; // ignore control chars
+      }
+      if (inputKey === '\u001b') return; // ignore bare ESC
+      setInput(s => s + inputKey);
+    }
   });
 
   const [branch, setBranch] = useState<string>('');
