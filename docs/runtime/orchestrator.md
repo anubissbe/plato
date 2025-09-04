@@ -4,8 +4,7 @@
 - Input: user message or `/command`.
 - Context build: selected files/diffs, repo status, system prompts, memory, output-style.
 - Model call: streaming; tool-use if supported; else ReAct with tool-text responses.
-- Tool exec: gated by permissions; results summarized back into the turn.
-- Patch proposal: accumulate unified diff preview; wait for user `/apply`.
+- File writes (Claude parity): when the assistant proposes changes, Plato performs writes immediately ("Write(filename)") after safety and permission checks. Unified diffs are sanitized/used under the hood and recorded for `/revert`.
 - Post: update cost/tokens, compact if needed, persist session.
 
 ## Streaming & Cancellation
@@ -19,4 +18,4 @@
 
 ## Output Styles
 - Profiles control system prompts and renderers: concise/verbose/code-first/custom.
-- `/output-style` switches; `/output-style:new` saves under `styles/*.yaml`.
+- Default rendering mirrors Claude Code’s terse action lines (e.g., Write(filename) … Wrote N lines …).

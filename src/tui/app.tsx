@@ -13,7 +13,13 @@ function App() {
   const { exit } = useApp();
   const { stdin, setRawMode, isRawModeSupported } = useStdin();
   const [input, setInput] = useState('');
-  const [lines, setLines] = useState<string[]>(["Welcome to Plato. Type /help to get started."]);
+  const [lines, setLines] = useState<string[]>([
+    '✻ Welcome to Claude Code!',
+    '',
+    '  /help for help, /status for your current setup',
+    '',
+    `  cwd: ${process.cwd()}`,
+  ]);
   const [status, setStatus] = useState<string>('');
   const [cfg, setCfg] = useState<any>(null);
   const [confirm, setConfirm] = useState<null | { question: string; proceed: () => Promise<void> }>(null);
@@ -537,7 +543,7 @@ function App() {
           return copy;
         });
       }, (evt) => {
-        if (evt.type === 'info') setLines(prev=>prev.concat(`info: ${evt.message}`));
+        if (evt.type === 'info') setLines(prev=>prev.concat(evt.message));
         if (evt.type === 'tool-start') setLines(prev=>prev.concat(`tool: ${evt.message}`));
         if (evt.type === 'tool-end') setLines(prev=>prev.concat('tool: done'));
       });

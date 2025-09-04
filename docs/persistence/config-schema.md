@@ -10,6 +10,8 @@ provider:
       User-Agent: GitHubCopilotChat/0.26.7
 model:
   active: gpt-4o
+editing:
+  autoApply: on   # Claude Code parity: immediate writes
 permissions: {}
 hooks: {}
 statusline:

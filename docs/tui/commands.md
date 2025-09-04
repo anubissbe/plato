@@ -1,6 +1,6 @@
 # Slash Commands
 
-Complete command list and semantics (see DESIGN.md for overview):
+Complete command list and semantics (see DESIGN.md for overview). Behavior mirrors Claude Code: assistant writes files immediately and prints terse action lines.
 
 - `/help`: List commands and keybinds.
 - `/status`: Show version, provider, model, account, API, tool statuses.
@@ -18,6 +18,7 @@ Complete command list and semantics (see DESIGN.md for overview):
 - `/doctor`: Run diagnostics (binaries, auth, APIs, MCP).
 - `/compact`: Summarize history; keep pinned messages.
 - `/export [--md|--json] [path]`: Save transcript and patches.
+- `/apply-mode [auto|off]`: Toggle auto-write mode (Claude parity=auto). When `auto`, writes happen immediately; when `off`, you can audit diffs.
 - `/mcp`: List/attach/detach servers; health check.
 - `/login` / `/logout`: Authenticate/clear provider credentials.
 - `/hooks`: Show/edit hook configs; run a dry-run.
@@ -29,3 +30,13 @@ Complete command list and semantics (see DESIGN.md for overview):
 - `/resume`: Restore a paused session.
 - `/privacy-settings`: Show/update privacy options.
 - `/release-notes`: Show release notes.
+Example (Claude parity)
+```
+> make a file called hello.py and insert hello world code in python into it
+
+● Write(hello.py)
+  ⎿  Wrote 1 lines to hello.py
+     print("Hello, World!")
+
+● Done! Created hello.py with a Hello World program.
+```

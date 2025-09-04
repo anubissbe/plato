@@ -5,9 +5,9 @@
 [![Open Issues](https://img.shields.io/github/issues/anubissbe/plato)](https://github.com/anubissbe/plato/issues)
 [![Last Commit](https://img.shields.io/github/last-commit/anubissbe/plato)](https://github.com/anubissbe/plato/commits/main)
 
-Status: v1 (Claude-Code parity, Copilot-backed)
+Status: v1 (Claude Code parity, Copilot-backed)
 
-Plato is a Claude Code–style terminal AI coding assistant wired to GitHub Copilot. It provides a fast CLI/TUI chat with repo-aware tooling, strict tool-call bridging to MCP tools, safe patch previews, and gated applies.
+Plato is a Claude Code–compatible terminal AI coding assistant wired to GitHub Copilot. It mirrors Claude Code’s CLI/TUI behavior: the assistant writes files immediately ("Write(filename)") with concise confirmations, while still supporting audit tools (diffs, revert) under the hood.
 
 - Auth: GitHub Copilot device flow (keytar-backed if available)
 - Models: Copilot’s OpenAI-compatible chat (configurable model)
@@ -49,6 +49,19 @@ Add your short GIF at `docs/assets/plato-demo.gif` and it will render here:
 
 ## Verification Guide
 See `docs/verification.md` to test Copilot login and an end-to-end tool_call using the included mock MCP server.
+
+## Claude Parity Setup (optional)
+For exact Claude-style write behavior:
+- `/permissions default fs_patch allow`
+- `/apply-mode auto`
+Now requests like “create hello.py with hello world” will immediately write and show:
+```
+● Write(hello.py)
+  ⎿  Wrote 1 lines to hello.py
+     print("Hello, World!")
+
+● Done! Created hello.py with a Hello World program.
+```
 
 ## Notes
 - Patch application requires a Git repository. Run `git init` if needed.

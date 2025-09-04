@@ -1,20 +1,20 @@
 # Plato CLI/TUI – Design
 
 ## Product Goals
-- Parity with Claude Code’s terminal agent experience, renamed to `plato`.
+- Exact behavioral parity with Claude Code’s CLI/TUI, under the `plato` name.
 - Sign-in with GitHub Copilot; use Copilot subscription models.
-- Safe, local-first edits with tight git integration and fast iteration.
+- Immediate write semantics: assistant performs file writes directly ("Write(filename)") subject to permissions and safety checks, without requiring a separate `/apply` step.
 
 ## UX Overview
 - Single-command entry: `plato` opens a full-screen TUI with chat + context.
-- Panes: chat thread, file diff preview, context sidebar (files, branch, model).
-- Modes: interactive chat, command palette (`/`), quick actions, background tasks.
+- Interaction mirrors Claude Code: assistant announces actions (e.g., "Write(hello.py)") and performs them immediately; outputs concise confirmations (e.g., "Wrote 1 lines to hello.py").
+- Diff previews and patch engine remain available under the hood for auditing and `/revert`, but are not required in the normal flow.
 
 ## Core Features
-- Chat-driven coding: propose patches, diffs, refactors, explanations.
+- Chat-driven coding: immediate writes (with safety + permissions), diffs, refactors, explanations.
 - Repo awareness: index files, respect `.gitignore` + `.platoignore`.
 - Tooling: run shell, tests, and git operations with confirmation gates.
-- Apply/revert: preview unified diffs; apply atomically; undo/redo history.
+- Apply/revert: writes occur automatically; patch engine is used under the hood for atomic writes; `/revert` can undo the last changes.
 - Context control: add/remove files, search results, and diffs to the prompt.
 - Auth + Models: GitHub Copilot device login; select Copilot models; stream.
 

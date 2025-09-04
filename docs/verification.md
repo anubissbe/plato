@@ -24,20 +24,17 @@ Prereqs
 - If disabled: `/tool-call-preset on`
 - Strict mode is fine: `/tool-call-preset strict on`
 
-5) Trigger a Tool Call (Assistant)
-Send a prompt asking the assistant to use the tool:
-- Example prompt: `Use the MCP tool 'sum' from server 'local' to add 2 and 3.`
-
-The system injects a one-liner: the assistant should produce a fenced `json` block like:
-```json
-{"tool_call": {"server": "local", "name": "sum", "input": {"a": 2, "b": 3}}}
+5) Claude-style Writes (Parity)
+- Ensure parity mode: `/permissions default fs_patch allow` then `/apply-mode auto`.
+- Ask: `make a file called hello.py and insert hello world code in python into it`
+- You should see:
 ```
+● Write(hello.py)
+  ⎿  Wrote 1 lines to hello.py
+     print("Hello, World!")
 
-When the block appears, you should see TUI lines:
-- `tool: Running local:sum`
-- `tool: done`
-
-Then the assistant continues with the result (e.g., `5`).
+● Done! Created hello.py with a Hello World program.
+```
 
 6) Patch Engine Check (optional)
 - In a non-git folder, `/apply` will fail with a clear message.

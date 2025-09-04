@@ -259,13 +259,61 @@ async function maybeAutoApply(patch: string | null, onEvent?: (e: OrchestratorEv
   // Dry-run
   const dry = await dryRunApply(patch);
   if (!dry.ok) { onEvent?.({ type: 'info', message: `auto-apply check failed: ${dry.conflicts.slice(0,2).join(' | ')}` }); return; }
-  // Apply
+  // Announce actions (Claude-style) and apply
+  const details = parseDiffDetails(patch);
+  for (const d of details) {
+    onEvent?.({ type: 'info', message: `● Write(${d.file})` });
+  }
   try {
     await applyPatch(patch);
-    onEvent?.({ type: 'info', message: 'auto-applied patch.' });
+    for (const d of details) {
+      onEvent?.({ type: 'info', message: `  ⎿  Wrote ${d.addedLines} lines to ${d.file}` });
+      if (d.newFile && d.preview.length) {
+        for (const line of d.preview.slice(0, 10)) onEvent?.({ type: 'info', message: `     ${line}` });
+      }
+    }
+    if (details.length) onEvent?.({ type: 'info', message: `
+● Done! ${details.length===1 ? `Created ${details[0].file}` : 'Applied changes.'}` });
     pendingPatch = null;
   } catch (e: any) {
     onEvent?.({ type: 'info', message: `auto-apply error: ${e?.message || e}` });
+  }
+}
+
+function parseDiffDetails(patch: string): { file: string; addedLines: number; newFile: boolean; preview: string[] }[] {
+  const out: { file: string; addedLines: number; newFile: boolean; preview: string[] }[] = [];
+  // sanitize similar to patch.ts
+  const m = patch.match(/\*\*\* Begin Patch[\s\S]*?\n([\s\S]*?)\n\*\*\* End Patch/);
+  let s = m ? m[1] : patch;
+  s = s.replace(/^```.*$/gm, '').trim();
+  const sections = s.split(/^diff --git .*$/m).filter(Boolean);
+  if (sections.length) {
+    for (const sec of sections) collect(sec, out);
+  } else {
+    collect(s, out);
+  }
+  return out;
+  function collect(text: string, acc: any[]) {
+    const lines = text.split(/\r?\n/);
+    let plus = 0;
+    let file = '';
+    let newFile = false;
+    const preview: string[] = [];
+    for (let i=0;i<lines.length;i++) {
+      const l = lines[i];
+      if (l.startsWith('+++ ')) {
+        const p = l.replace(/^\+\+\+\s+/, '');
+        file = p.replace(/^b\//,'');
+      }
+      if (l.startsWith('--- ')) {
+        if (/\/dev\/null/.test(l)) newFile = true;
+      }
+      if (l.startsWith('+') && !l.startsWith('+++')) {
+        plus++;
+        if (newFile) preview.push(l.slice(1));
+      }
+    }
+    if (file) acc.push({ file, addedLines: plus, newFile, preview });
   }
 }
 
