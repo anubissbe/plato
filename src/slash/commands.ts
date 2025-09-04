@@ -16,7 +16,7 @@ export const SLASH_COMMANDS: SlashCommand[] = [
   { name: '/output-style:new', summary: 'Create a custom output style' },
   { name: '/cost', summary: 'Show tokens, cost, and duration' },
   { name: '/doctor', summary: 'Diagnose setup and connectivity' },
-  { name: '/compact', summary: 'Compact conversation history' },
+  { name: '/compact', summary: 'Compact conversation history with optional focus instructions' },
   { name: '/export', summary: 'Export conversation to file or clipboard' },
   { name: '/mcp', summary: 'Manage MCP servers' },
   { name: '/login', summary: 'Authenticate with a provider' },
@@ -32,6 +32,10 @@ export const SLASH_COMMANDS: SlashCommand[] = [
   { name: '/release-notes', summary: 'Show Plato release notes' },
   { name: '/keydebug', summary: 'Capture next key raw bytes (debug)' },
   { name: '/apply-mode', summary: 'Auto-apply patches: [auto|off]' },
+  { name: '/ide', summary: 'Connect to IDE for file awareness and linter warnings' },
+  { name: '/install-github-app', summary: 'Install GitHub app for automatic PR reviews' },
+  { name: '/terminal-setup', summary: 'Fix terminal configuration (Shift+Enter, key bindings)' },
+  { name: '/bug', summary: 'Report bug - opens Plato GitHub issues page' },
 ];
 
 export const SLASH_MAP = new Map(SLASH_COMMANDS.map(c => [c.name, c] as const));

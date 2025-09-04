@@ -67,15 +67,52 @@ export async function callTool(serverId: string, toolName: string, input: any): 
   const servers = await listServers();
   const s = servers.find(x => x.id === serverId);
   if (!s) throw new Error(`no mcp server: ${serverId}`);
-  const endpoints = [`${s.url.replace(/\/$/,'')}/tools/${encodeURIComponent(toolName)}`, `${s.url.replace(/\/$/,'')}/.well-known/mcp/tools/${encodeURIComponent(toolName)}`];
+  
+  console.log(`🔧 Running tool: ${toolName}...`);
+  
+  const endpoints = [
+    `${s.url.replace(/\/$/,'')}/tools/${encodeURIComponent(toolName)}`,
+    `${s.url.replace(/\/$/,'')}/.well-known/mcp/tools/${encodeURIComponent(toolName)}`
+  ];
+  
   let lastErr: any;
+  const retryDelays = [1000, 2000, 4000];
+  const retryableCodes = [502, 503, 504, 429];
+  const nonRetryableCodes = [400, 401, 403, 404];
+  
   for (const ep of endpoints) {
-    try {
-      const r = await fetch(ep, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ input }) });
-      if (!r.ok) { lastErr = new Error(`status ${r.status}`); continue; }
-      const data = await r.json();
-      return data;
-    } catch (e) { lastErr = e; }
+    for (let attempt = 0; attempt <= 3; attempt++) {
+      try {
+        const r = await fetch(ep, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ input })
+        });
+        
+        if (nonRetryableCodes.includes(r.status)) {
+          throw new Error(`Tool call failed: ${r.status} ${r.statusText}`);
+        }
+        
+        if (retryableCodes.includes(r.status) && attempt < 3) {
+          await new Promise(resolve => setTimeout(resolve, retryDelays[attempt]));
+          continue;
+        }
+        
+        if (!r.ok) {
+          lastErr = new Error(`status ${r.status}`);
+          break;
+        }
+        
+        const data = await r.json();
+        console.log('\x1b[90m' + JSON.stringify(data, null, 2) + '\x1b[0m');
+        return data;
+      } catch (e) {
+        lastErr = e;
+        if (attempt < 3) {
+          await new Promise(resolve => setTimeout(resolve, retryDelays[attempt]));
+        }
+      }
+    }
   }
   throw lastErr || new Error('tool call failed');
 }

@@ -1,40 +1,112 @@
-import { execa } from 'execa';
+import { spawn, ChildProcess } from 'child_process';
+import fs from 'fs/promises';
+import path from 'path';
+import { randomUUID } from 'crypto';
 
-type Session = { name: string; cwd: string; proc: any; log: string[] };
-const sessions = new Map<string, Session>();
-
-export function listSessions() {
-  return Array.from(sessions.values()).map(s => ({ name: s.name, cwd: s.cwd, running: !s.proc.killed }));
+interface BashSession {
+  id: string;
+  pid: number;
+  process: ChildProcess;
+  created: Date;
+  cwd: string;
 }
 
-export async function newSession(name: string, cwd = process.cwd()) {
-  if (sessions.has(name)) throw new Error(`session exists: ${name}`);
-  const proc = execa(process.env.SHELL || 'bash', ['-lc', 'echo $SHELL session started'], { cwd });
-  const log: string[] = [];
-  proc.stdout?.on('data', (d) => log.push(String(d)));
-  proc.stderr?.on('data', (d) => log.push(String(d)));
-  sessions.set(name, { name, cwd, proc, log });
+const sessions = new Map<string, BashSession>();
+
+export async function handleBashCommand(command: string): Promise<string[]> {
+  const parts = command.split(/\s+/);
+  const subcommand = parts[1] || 'list';
+  
+  switch (subcommand) {
+    case 'list':
+      return listSessions();
+    
+    case 'new':
+      return createSession();
+    
+    case 'kill':
+      const id = parts[2];
+      if (!id) return ['Usage: /bashes kill <id>'];
+      return killSession(id);
+    
+    default:
+      return ['Usage: /bashes [list|new|kill <id>]'];
+  }
 }
 
-export async function killSession(name: string) {
-  const s = sessions.get(name);
-  if (!s) return false;
-  s.proc.kill('SIGTERM');
-  sessions.delete(name);
-  return true;
+function listSessions(): string[] {
+  if (sessions.size === 0) {
+    return ['No active bash sessions'];
+  }
+  
+  const lines = ['Active bash sessions:'];
+  for (const [id, session] of sessions) {
+    lines.push(`  ${id.slice(0, 8)} - PID: ${session.pid} - Created: ${session.created.toLocaleString()}`);
+  }
+  return lines;
 }
 
-export async function runInSession(name: string, cmd: string) {
-  const s = sessions.get(name);
-  if (!s) throw new Error(`no session: ${name}`);
-  const child = execa(process.env.SHELL || 'bash', ['-lc', cmd], { cwd: s.cwd });
-  child.stdout?.on('data', (d) => s.log.push(String(d)));
-  child.stderr?.on('data', (d) => s.log.push(String(d)));
-  const res = await child;
-  return res.exitCode;
+async function createSession(): Promise<string[]> {
+  const id = randomUUID();
+  const shell = process.env.SHELL || 'bash';
+  
+  const proc = spawn(shell, ['-i'], {
+    cwd: process.cwd(),
+    env: { ...process.env, PS1: `[${id.slice(0, 8)}]$ ` }
+  });
+  
+  const session: BashSession = {
+    id,
+    pid: proc.pid!,
+    process: proc,
+    created: new Date(),
+    cwd: process.cwd()
+  };
+  
+  sessions.set(id, session);
+  
+  // Log output to file
+  const logPath = path.join('.plato', 'bashes', `${id}.log`);
+  await fs.mkdir(path.dirname(logPath), { recursive: true });
+  const logStream = await fs.open(logPath, 'w');
+  
+  proc.stdout?.on('data', (data) => {
+    logStream.write(data);
+  });
+  
+  proc.stderr?.on('data', (data) => {
+    logStream.write(data);
+  });
+  
+  proc.on('exit', () => {
+    sessions.delete(id);
+    logStream.close();
+  });
+  
+  return [`Created bash session: ${id.slice(0, 8)}`];
 }
 
-export function getLog(name: string) {
-  const s = sessions.get(name);
-  return s ? s.log.slice(-200) : [];
+function killSession(id: string): string[] {
+  const fullId = Array.from(sessions.keys()).find(k => k.startsWith(id));
+  if (!fullId) {
+    return [`No session found with ID: ${id}`];
+  }
+  
+  const session = sessions.get(fullId)!;
+  session.process.kill();
+  sessions.delete(fullId);
+  
+  return [`Killed session: ${fullId.slice(0, 8)}`];
 }
+
+export function killAllSessions() {
+  for (const session of sessions.values()) {
+    session.process.kill();
+  }
+  sessions.clear();
+}
+
+// Clean up on exit
+process.on('exit', killAllSessions);
+process.on('SIGINT', killAllSessions);
+process.on('SIGTERM', killAllSessions);

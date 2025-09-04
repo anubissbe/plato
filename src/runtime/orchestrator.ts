@@ -4,6 +4,7 @@ import { reviewPatch } from '../policies/security.js';
 import { checkPermission } from '../tools/permissions.js';
 import { runHooks } from '../tools/hooks.js';
 import fs from 'fs/promises';
+import path from 'path';
 import { callTool } from '../integrations/mcp.js';
 import { loadConfig } from '../config.js';
 
@@ -33,6 +34,12 @@ const metrics = {
 };
 
 let pendingPatch: string | null = null;
+let saveTimer: NodeJS.Timeout | null = null;
+let streamCancellation: AbortController | null = null;
+
+// Enhanced mode state
+let transcriptMode: boolean = false;
+let backgroundMode: boolean = false;
 
 type OrchestratorEvent = { type: 'tool-start'|'tool-end'|'info'; message: string };
 
@@ -63,44 +70,171 @@ export const orchestrator = {
   async respondStream(input: string, onDelta: (text: string)=>void, onEvent?: (e: OrchestratorEvent)=>void): Promise<string> {
     await runHooks('pre-prompt');
     history.push({ role: 'user', content: input });
+    
+    // Create cancellation token for this stream
+    streamCancellation = new AbortController();
+    
     const t0 = Date.now();
     const msgs = await prepareMessages(history);
-    const { content, usage } = await chatStream(msgs, {}, onDelta);
-    const dt = Date.now() - t0;
-    metrics.durationMs += dt;
-    metrics.turns += 1;
-    if (usage) {
-      metrics.inputTokens += usage.prompt_tokens ?? usage.input_tokens ?? 0;
-      metrics.outputTokens += usage.completion_tokens ?? usage.output_tokens ?? 0;
+    
+    try {
+      const { content, usage } = await chatStream(msgs, {}, (d) => { 
+        if (streamCancellation?.signal.aborted) return;
+        onDelta(d); 
+        saveSessionDebounced().catch(()=>{}); 
+      });
+      
+      const dt = Date.now() - t0;
+      metrics.durationMs += dt;
+      metrics.turns += 1;
+      
+      if (usage) {
+        metrics.inputTokens += usage.prompt_tokens ?? usage.input_tokens ?? 0;
+        metrics.outputTokens += usage.completion_tokens ?? usage.output_tokens ?? 0;
+      }
+      
+      const assistant = content || '(no content)';
+      history.push({ role: 'assistant', content: assistant });
+      
+      await runHooks('post-response');
+      pendingPatch = extractPatch(assistant) || null;
+      await maybeAutoApply(pendingPatch, onEvent);
+      await maybeBridgeTool(assistant, onEvent);
+      await saveSessionDefault();
+      
+      // Add to transcript if enabled
+      if (transcriptMode) {
+        await this.addMemory('transcript', `User: ${input}\nAssistant: ${assistant}`);
+      }
+      
+      return assistant;
+    } catch (e: any) {
+      if (e.name === 'AbortError' || streamCancellation?.signal.aborted) {
+        onEvent?.({ type: 'info', message: 'Operation cancelled' });
+        return '(cancelled)';
+      }
+      throw e;
+    } finally {
+      streamCancellation = null;
     }
-    const assistant = content || '(no content)';
-    history.push({ role: 'assistant', content: assistant });
-    await runHooks('post-response');
-    pendingPatch = extractPatch(assistant) || null;
-    await maybeAutoApply(pendingPatch, onEvent);
-    await maybeBridgeTool(assistant, onEvent, onDelta);
-    await saveSessionDefault();
-    return assistant;
   },
   getMetrics() { return { ...metrics }; },
   getHistory() { return [...history]; },
+  compactHistory(keep: number) { if (keep > 0 && history.length > keep) history.splice(0, history.length - keep); },
+  async getMemory(): Promise<string[]> { 
+    try {
+      const memPath = path.join(process.cwd(), '.plato/memory');
+      const files = await fs.readdir(memPath).catch(() => []);
+      const memories: string[] = [];
+      
+      for (const file of files.sort()) {
+        if (file.endsWith('.json')) {
+          const content = await fs.readFile(path.join(memPath, file), 'utf8');
+          try {
+            const mem = JSON.parse(content);
+            memories.push(`[${mem.timestamp}] ${mem.type}: ${mem.content}`);
+          } catch {
+            memories.push(content);
+          }
+        }
+      }
+      
+      return memories.slice(-100); // Return last 100 memories
+    } catch {
+      return [];
+    }
+  },
+  async clearMemory(): Promise<void> {
+    try {
+      const memPath = path.join(process.cwd(), '.plato/memory');
+      const files = await fs.readdir(memPath).catch(() => []);
+      
+      for (const file of files) {
+        if (file.endsWith('.json')) {
+          await fs.unlink(path.join(memPath, file)).catch(() => {});
+        }
+      }
+    } catch {
+      // Ignore errors
+    }
+  },
+  async addMemory(type: string, content: string): Promise<void> {
+    try {
+      const memPath = path.join(process.cwd(), '.plato/memory');
+      await fs.mkdir(memPath, { recursive: true });
+      
+      const timestamp = new Date().toISOString();
+      const id = `${Date.now()}-${Math.random().toString(36).substring(2, 9)}`;
+      const memory = { id, type, content, timestamp };
+      
+      await fs.writeFile(
+        path.join(memPath, `${id}.json`),
+        JSON.stringify(memory, null, 2),
+        'utf8'
+      );
+      
+      // Keep only last 1000 memories
+      const files = await fs.readdir(memPath);
+      const jsonFiles = files.filter(f => f.endsWith('.json')).sort();
+      if (jsonFiles.length > 1000) {
+        const toDelete = jsonFiles.slice(0, jsonFiles.length - 1000);
+        for (const file of toDelete) {
+          await fs.unlink(path.join(memPath, file)).catch(() => {});
+        }
+      }
+    } catch {
+      // Ignore errors
+    }
+  },
   getPendingPatch() { return pendingPatch; },
   clearPendingPatch() { pendingPatch = null; },
-  async exportJSON(file: string) {
-    const data = { history, metrics };
-    await fs.writeFile(file, JSON.stringify(data, null, 2), 'utf8');
-  },
-  async exportMarkdown(file: string) {
-    const lines: string[] = [];
-    for (const m of history) {
-      lines.push(`### ${m.role}`);
-      lines.push('');
-      lines.push(m.content);
-      lines.push('');
+  async exportJSON(file?: string): Promise<void> {
+    const { getSelected } = await import('../context/context.js');
+    const data = {
+      version: '1.0',
+      timestamp: new Date().toISOString(),
+      messages: history,
+      metrics: metrics,
+      context: await getSelected(),
+      config: await loadConfig()
+    };
+    const json = JSON.stringify(data, null, 2);
+    if (file) {
+      await fs.writeFile(file, json, 'utf8');
+    } else {
+      console.log(json);
     }
-    lines.push('');
-    lines.push(`Tokens: in ${metrics.inputTokens} / out ${metrics.outputTokens} | duration ${metrics.durationMs}ms | turns ${metrics.turns}`);
-    await fs.writeFile(file, lines.join('\n'), 'utf8');
+  },
+  async exportMarkdown(file?: string): Promise<void> {
+    let md = '# Plato Conversation\n\n';
+    md += `Date: ${new Date().toISOString()}\n\n`;
+    for (const msg of history) {
+      if (msg.role === 'user') {
+        md += `## User\n${msg.content}\n\n`;
+      } else if (msg.role === 'assistant') {
+        md += `## Assistant\n${msg.content}\n\n`;
+      } else if (msg.role === 'tool') {
+        md += `> Tool Result:\n> ${msg.content.replace(/\n/g, '\n> ')}\n\n`;
+      }
+    }
+    if (file) {
+      await fs.writeFile(file, md, 'utf8');
+    } else {
+      console.log(md);
+    }
+  },
+  async exportToClipboard(): Promise<void> {
+    // dynamic import via eval to avoid type resolution at build time
+    const mod: any = await (new Function('m','return import(m)'))('clipboardy').catch(()=>null);
+    let md = '# Plato Conversation\n\n';
+    md += `Date: ${new Date().toISOString()}\n\n`;
+    for (const msg of history) {
+      if (msg.role === 'user') md += `## User\n${msg.content}\n\n`;
+      else if (msg.role === 'assistant') md += `## Assistant\n${msg.content}\n\n`;
+      else if (msg.role === 'tool') md += `> Tool Result:\n> ${msg.content.replace(/\n/g, '\n> ')}\n\n`;
+    }
+    if (mod?.clipboard?.write) await mod.clipboard.write(md);
+    else console.log(md);
   },
   async importJSON(file: string) {
     const txt = await fs.readFile(file, 'utf8');
@@ -110,6 +244,145 @@ export const orchestrator = {
     }
     if (data.metrics && typeof data.metrics === 'object') {
       Object.assign(metrics, data.metrics);
+    }
+  },
+
+  // Keyboard shortcut support methods
+  cancelStream() {
+    if (streamCancellation) {
+      streamCancellation.abort();
+      streamCancellation = null;
+    }
+  },
+
+  isTranscriptMode() {
+    return transcriptMode;
+  },
+
+  async setTranscriptMode(enabled: boolean) {
+    transcriptMode = enabled;
+    await this.addMemory('mode_change', `Transcript mode ${enabled ? 'enabled' : 'disabled'}`);
+  },
+
+  async setBackgroundMode(enabled: boolean) {
+    backgroundMode = enabled;
+    await this.addMemory('mode_change', `Background mode ${enabled ? 'enabled' : 'disabled'}`);
+  },
+
+  isBackgroundMode() {
+    return backgroundMode;
+  },
+
+  getMessageHistory(): Array<{ role: string; content: string }> {
+    return history
+      .filter(msg => msg.role === 'user' || msg.role === 'assistant')
+      .map(msg => ({ role: msg.role, content: msg.content }));
+  },
+
+  getSelectedHistoryMessage(index: number): { role: string; content: string } | null {
+    const userMessages = history.filter(msg => msg.role === 'user');
+    if (index >= 0 && index < userMessages.length) {
+      return userMessages[index];
+    }
+    return null;
+  },
+
+  async selectHistoryMessage(index: number): Promise<string | null> {
+    const message = this.getSelectedHistoryMessage(index);
+    if (message) {
+      await this.addMemory('history_selection', `Selected message: ${message.content.substring(0, 100)}`);
+      return message.content;
+    }
+    return null;
+  },
+
+  clearHistorySelection() {
+    // No persistent state to clear for now
+  },
+
+  async pasteImageFromClipboard(): Promise<{ success: boolean; message: string }> {
+    try {
+      // Try to detect clipboard content - this is a placeholder implementation
+      // In a real implementation, this would use platform-specific APIs
+      const { execSync } = await import('child_process');
+      
+      // Platform-specific clipboard image detection
+      let hasImage = false;
+      let imagePath = '';
+      
+      if (process.platform === 'darwin') {
+        // macOS - check for image in clipboard
+        try {
+          const result = execSync('osascript -e "get the clipboard" 2>/dev/null', { encoding: 'utf8', timeout: 5000 });
+          hasImage = result.includes('missing value') === false;
+        } catch {
+          hasImage = false;
+        }
+      } else if (process.platform === 'win32') {
+        // Windows - PowerShell clipboard check
+        try {
+          const result = execSync('powershell.exe -Command "Get-Clipboard -Format Image" 2>$null', { encoding: 'utf8', timeout: 5000 });
+          hasImage = result.trim().length > 0;
+        } catch {
+          hasImage = false;
+        }
+      } else {
+        // Linux - xclip check
+        try {
+          const result = execSync('xclip -selection clipboard -t image/png -o 2>/dev/null | wc -c', { encoding: 'utf8', timeout: 5000 });
+          hasImage = parseInt(result.trim()) > 0;
+        } catch {
+          hasImage = false;
+        }
+      }
+
+      if (!hasImage) {
+        return {
+          success: false,
+          message: 'No image found in clipboard'
+        };
+      }
+
+      // Save clipboard image to temp file
+      const tmpDir = await fs.mkdtemp(path.join(process.cwd(), '.plato/tmp-'));
+      imagePath = path.join(tmpDir, 'clipboard-image.png');
+      
+      if (process.platform === 'darwin') {
+        execSync(`osascript -e 'tell application "System Events" to write (the clipboard as «class PNGf») to (open for access file "${imagePath}" with write permission)' && echo "Image saved"`, { timeout: 10000 });
+      } else if (process.platform === 'win32') {
+        execSync(`powershell.exe -Command "Get-Clipboard -Format Image | ForEach-Object { $_.Save('${imagePath.replace(/\\/g, '\\\\')}') }"`, { timeout: 10000 });
+      } else {
+        execSync(`xclip -selection clipboard -t image/png -o > "${imagePath}"`, { timeout: 10000 });
+      }
+
+      // Verify the image was saved
+      const stats = await fs.stat(imagePath);
+      if (stats.size > 0) {
+        await this.addMemory('image_paste', `Image pasted from clipboard: ${imagePath} (${stats.size} bytes)`);
+        
+        // Add image context to conversation
+        history.push({ 
+          role: 'user', 
+          content: `[Image pasted from clipboard: ${imagePath}]` 
+        });
+        
+        return {
+          success: true,
+          message: `Image pasted successfully (${Math.round(stats.size / 1024)}KB)`
+        };
+      } else {
+        return {
+          success: false,
+          message: 'Failed to save clipboard image'
+        };
+      }
+
+    } catch (e: any) {
+      await this.addMemory('image_paste_error', `Clipboard paste failed: ${e?.message || e}`);
+      return {
+        success: false,
+        message: `Clipboard access failed: ${e?.message || 'Unknown error'}`
+      };
     }
   }
 };
@@ -171,35 +444,45 @@ function parseToolCall(text: string, strict = true): null | { server: string; na
   return null;
 }
 
-async function maybeBridgeTool(assistant: string, onEvent?: (e: OrchestratorEvent)=>void, onDelta?: (t: string)=>void) {
-  let cycles = 0;
-  let lastAssistant = assistant;
+async function maybeBridgeTool(content: string, onEvent?: (e: OrchestratorEvent)=>void): Promise<void> {
   const cfg = await loadConfig();
-  if (cfg.toolCallPreset?.enabled === false) return; // Disabled entirely per config
-  const strict = cfg.toolCallPreset?.strictOnly !== false && !(cfg.toolCallPreset?.allowHeuristics);
-  while (cycles < 3) {
-    const calls = parseAllToolCalls(lastAssistant, strict);
-    if (!calls.length) break;
-    for (const call of calls) {
-      const decision = await checkPermission({ tool: 'mcp', command: `${call.server}:${call.name}` });
-      if (decision === 'deny') { onEvent?.({ type: 'info', message: `Tool call denied: ${call.server}:${call.name}` }); continue; }
-      if (decision === 'confirm') { onEvent?.({ type: 'info', message: `Tool call requires confirmation: ${call.server}:${call.name}. Use /mcp run to execute.` }); continue; }
-      onEvent?.({ type: 'tool-start', message: `Running ${call.server}:${call.name}` });
-      try {
-        const result = await callTool(call.server, call.name, call.input);
-        history.push({ role: 'tool', content: JSON.stringify({ server: call.server, name: call.name, input: call.input, result }) });
-      } catch (e: any) {
-        onEvent?.({ type: 'info', message: `Tool error: ${e?.message || e}` });
-      } finally {
-        onEvent?.({ type: 'tool-end', message: `Done` });
-      }
-    }
-    const msgs = await prepareMessages(history);
-    const { content } = await chatStream(msgs, { initiator: 'agent' }, (d)=> onDelta?.(d));
-    lastAssistant = content || '';
-    history.push({ role: 'assistant', content: lastAssistant });
-    pendingPatch = extractPatch(lastAssistant) || null;
-    cycles++;
+  if (cfg.toolCallPreset?.enabled === false) return;
+  // Use strict JSON block detection matching Claude Code
+  const toolCallRegex = /```json\s*\n\s*\{\s*"tool_call"\s*:\s*\{[\s\S]*?\}\s*\}\s*\n\s*```/;
+  const match = content.match(toolCallRegex);
+  if (!match) return;
+  const jsonBlock = match[0];
+  const jsonStr = jsonBlock.replace(/```json\s*\n/, '').replace(/\n\s*```/, '');
+  let toolCall: any;
+  try {
+    // Parse with timeout protection
+    const parsePromise = new Promise((resolve, reject) => {
+      try { const parsed = JSON.parse(jsonStr); resolve(parsed); } catch (e) { reject(e); }
+    });
+    toolCall = await Promise.race([
+      parsePromise,
+      new Promise((_, reject) => setTimeout(() => reject(new Error('Tool call parse timeout')), 30000))
+    ]);
+  } catch (e: any) {
+    console.error('Failed to parse tool call:', e.message);
+    return;
+  }
+  if (!toolCall?.tool_call?.server || !toolCall?.tool_call?.name) {
+    console.error('Invalid tool call format: missing server or name');
+    return;
+  }
+  const { server, name, input = {} } = toolCall.tool_call;
+  const decision = await checkPermission({ tool: 'mcp', command: `${server}:${name}` });
+  if (decision !== 'allow') { onEvent?.({ type: 'info', message: `Tool call requires permission: ${server}:${name} => ${decision}` }); return; }
+  onEvent?.({ type: 'tool-start', message: `Running ${name}...` });
+  try {
+    const result = await callTool(server, name, input);
+    history.push({ role: 'tool', content: JSON.stringify(result) });
+    onEvent?.({ type: 'tool-end', message: 'Tool completed' });
+  } catch (e: any) {
+    const error = `Tool failed: ${e?.message || e}`;
+    history.push({ role: 'tool', content: error });
+    onEvent?.({ type: 'tool-end', message: error });
   }
 }
 
@@ -244,6 +527,18 @@ async function saveSessionDefault() {
     await fs.writeFile(file, JSON.stringify(data, null, 2), 'utf8');
   } catch {}
 }
+
+async function saveSessionDebounced() {
+  if (saveTimer) clearTimeout(saveTimer);
+  saveTimer = setTimeout(async () => {
+    await saveSessionDefault();
+  }, 2000);
+}
+
+process.on('SIGINT', async () => {
+  await saveSessionDefault();
+  process.exit(0);
+});
 
 async function maybeAutoApply(patch: string | null, onEvent?: (e: OrchestratorEvent)=>void) {
   if (!patch) return;

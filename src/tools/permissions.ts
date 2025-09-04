@@ -29,6 +29,18 @@ export async function loadPermissions(): Promise<Permissions> {
 export type PermissionQuery = { tool: string; path?: string; command?: string };
 
 export async function checkPermission(q: PermissionQuery): Promise<'allow'|'deny'|'confirm'> {
+  // Check for dangerous skip mode (--dangerously-skip-permissions)
+  if (process.env.PLATO_SKIP_PERMISSIONS === 'true') {
+    return 'allow';
+  }
+
+  // Check config for dangerous mode
+  const { loadConfig } = await import('../config.js');
+  const config = await loadConfig();
+  if (config.privacy?.skip_all_prompts || config.privacy?.dangerous_mode) {
+    return 'allow';
+  }
+
   const p = await loadPermissions();
   const rules = p.rules || [];
   for (const r of rules) {

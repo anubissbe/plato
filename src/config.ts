@@ -16,7 +16,13 @@ export type Config = {
   model?: { active?: string };
   statusline?: { format?: string };
   editing?: { autoApply?: 'on'|'off' };
-  privacy?: { redact?: boolean; prompt_on_large_payloads?: boolean; max_payload_mb?: number };
+  privacy?: { 
+    redact?: boolean; 
+    prompt_on_large_payloads?: boolean; 
+    max_payload_mb?: number;
+    skip_all_prompts?: boolean;    // for --dangerously-skip-permissions
+    dangerous_mode?: boolean;      // headless mode flag
+  };
   context?: {
     roots?: string[];
     selected?: string[];
@@ -60,12 +66,38 @@ export async function loadConfig(): Promise<Config> {
   return cached;
 }
 
-export async function setConfigValue(key: string, value: string) {
+export async function setConfigValue(key: string, value: string): Promise<void> {
+  // Type coercion based on known keys
+  let parsedValue: any = value;
+  
+  // Boolean fields
+  if (['telemetry', 'vimMode', 'autoApply'].includes(key)) {
+    parsedValue = value === 'true' || value === 'on';
+  }
+  // Number fields
+  else if (['port', 'timeout', 'maxRetries'].includes(key)) {
+    parsedValue = Number(value);
+    if (isNaN(parsedValue)) {
+      throw new Error(`Invalid value for ${key}: expected number`);
+    }
+  }
+  // JSON fields
+  else if (['toolCallPreset', 'statusline', 'editing'].includes(key)) {
+    try {
+      parsedValue = JSON.parse(value);
+    } catch {
+      throw new Error(`Invalid value for ${key}: expected valid JSON`);
+    }
+  }
+  
+  const cfgObj = await loadConfig();
+  (cfgObj as any)[key] = parsedValue;
+  await saveConfig(cfgObj);
+}
+
+async function saveConfig(cfg: Config): Promise<void> {
   await fs.mkdir(GLOBAL_DIR, { recursive: true });
-  const current = (await readYamlSafe(GLOBAL_CFG)) || {};
-  // naive dotless setter for top-level keys
-  (current as any)[key] = tryParse(value);
-  await fs.writeFile(GLOBAL_CFG, YAML.stringify(current), 'utf8');
+  await fs.writeFile(GLOBAL_CFG, YAML.stringify(cfg), 'utf8');
   cached = null;
 }
 

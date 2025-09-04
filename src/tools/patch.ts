@@ -80,13 +80,11 @@ async function writeJournal(j: JournalEntry[]) {
 }
 
 async function ensureGitRepo() {
-  try {
-    const { stdout } = await execa('git', ['rev-parse', '--is-inside-work-tree']);
-    if ((stdout || '').trim() !== 'true') {
-      throw new Error('Not a Git repository');
-    }
-  } catch {
-    throw new Error('Patch application requires a Git repository. Run `git init` in this folder and try again.');
+  const { default: simpleGit } = await import('simple-git');
+  const git = simpleGit();
+  const isRepo = await git.checkIsRepo();
+  if (!isRepo) {
+    throw new Error('Patch operations require a Git repository. Run `git init` first.');
   }
 }
 
