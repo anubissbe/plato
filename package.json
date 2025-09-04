@@ -1,0 +1,38 @@
+{
+  "name": "plato",
+  "version": "1.0.0",
+  "private": true,
+  "type": "module",
+  "bin": {
+    "plato": "bin/plato"
+  },
+  "scripts": {
+    "dev": "tsx src/cli.ts",
+    "build": "rimraf dist && tsc -p tsconfig.json",
+    "start": "node dist/cli.js",
+    "typecheck": "tsc -p tsconfig.json --noEmit"
+  },
+  "dependencies": {
+    "fast-glob": "^3.3.2",
+    "ignore": "^5.3.1",
+    "ink": "^4.4.1",
+    "react": "^18.2.0",
+    "simple-git": "^3.21.0",
+    "yaml": "^2.5.0",
+    "zod": "^3.23.8",
+    "execa": "^9.3.0"
+  },
+  "optionalDependencies": {
+    "keytar": "^7.9.0",
+    "node-pty": "^1.0.0"
+  },
+  "devDependencies": {
+    "@types/node": "^20.14.10",
+    "@types/react": "^18.3.5",
+    "rimraf": "^5.0.7",
+    "ts-node": "^10.9.2",
+    "tslib": "^2.6.3",
+    "tsx": "^4.16.2",
+    "typescript": "^5.5.4"
+  }
+}

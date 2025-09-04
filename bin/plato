@@ -1,0 +1,18 @@
+#!/usr/bin/env node
+import { fileURLToPath } from 'url';
+import { resolve, dirname } from 'path';
+import { spawn } from 'child_process';
+import fs from 'fs';
+
+const __filename = fileURLToPath(import.meta.url);
+const __dirname = dirname(__filename);
+
+const distEntry = resolve(__dirname, '../dist/cli.js');
+if (fs.existsSync(distEntry)) {
+  const { pathToFileURL } = await import('url');
+  await import(pathToFileURL(distEntry).href);
+} else {
+  const srcEntry = resolve(__dirname, '../src/cli.ts');
+  const child = spawn(process.execPath, ['--import', 'tsx', srcEntry, ...process.argv.slice(2)], { stdio: 'inherit' });
+  child.on('exit', (code) => process.exit(code ?? 0));
+}

@@ -1,0 +1,36 @@
+export type SlashCommand = { name: string; summary: string };
+
+export const SLASH_COMMANDS: SlashCommand[] = [
+  { name: '/help', summary: 'Show help and list all commands' },
+  { name: '/status', summary: 'Show Plato status' },
+  { name: '/statusline', summary: 'Configure the statusline display' },
+  { name: '/init', summary: 'Initialize a PLATO.md file with codebase documentation' },
+  { name: '/agents', summary: 'Manage agent configurations' },
+  { name: '/permissions', summary: 'Manage allow/deny tool permission rules' },
+  { name: '/model', summary: 'List models and switch active model' },
+  { name: '/context', summary: 'Manage context and visualize token usage' },
+  { name: '/add-dir', summary: 'Add a new working directory to context' },
+  { name: '/bashes', summary: 'List and manage shell sessions' },
+  { name: '/memory', summary: 'View, edit, or reset memory' },
+  { name: '/output-style', summary: 'Set or switch output style' },
+  { name: '/output-style:new', summary: 'Create a custom output style' },
+  { name: '/cost', summary: 'Show tokens, cost, and duration' },
+  { name: '/doctor', summary: 'Diagnose setup and connectivity' },
+  { name: '/compact', summary: 'Compact conversation history' },
+  { name: '/export', summary: 'Export conversation to file or clipboard' },
+  { name: '/mcp', summary: 'Manage MCP servers' },
+  { name: '/login', summary: 'Authenticate with a provider' },
+  { name: '/logout', summary: 'Logout and clear credentials' },
+  { name: '/hooks', summary: 'Manage hook configurations' },
+  { name: '/security-review', summary: 'Review pending changes for safety' },
+  { name: '/todos', summary: 'Generate and list TODO items' },
+  { name: '/vim', summary: 'Toggle Vim editing mode' },
+  { name: '/proxy', summary: 'Start an OpenAI-compatible HTTP proxy' },
+  { name: '/upgrade', summary: 'Upgrade to higher provider plan' },
+  { name: '/resume', summary: 'Resume a paused conversation' },
+  { name: '/privacy-settings', summary: 'View and update privacy settings' },
+  { name: '/release-notes', summary: 'Show Plato release notes' },
+];
+
+export const SLASH_MAP = new Map(SLASH_COMMANDS.map(c => [c.name, c] as const));
+
