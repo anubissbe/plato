@@ -49,18 +49,26 @@ function App() {
         setLines(prev=>prev.concat(`keydebug: dec=[${dec}] hex=[${hex}] names=[${names}]`));
         if (bytes.includes(0x7f) || bytes.includes(0x08)) setKeyDebug(false);
       }
-      // Handle DEL (0x7F) and BS (0x08)
-      for (const b of buf) {
-        if (b === 0x7f || b === 0x08) {
-          setInput(s => s.slice(0, -1));
-          // Don't break; allow multiple repeats in one chunk
-        }
-      }
     };
     // @ts-ignore node types
     stdin.on('data', onData);
     return () => { /* @ts-ignore */ stdin.off?.('data', onData); };
   }, [stdin]);
+
+  // Always-on process-level deletion handler for Backspace (DEL/BS)
+  useEffect(() => {
+    const ps = process.stdin as any;
+    const onDataProc = (data: any) => {
+      const buf: Buffer = Buffer.isBuffer(data) ? data : (typeof data === 'string' ? Buffer.from(data, 'utf8') : Buffer.from(data));
+      for (const b of buf) {
+        if (b === 0x7f || b === 0x08) {
+          setInput(s => s.slice(0, -1));
+        }
+      }
+    };
+    try { ps.on('data', onDataProc); } catch {}
+    return () => { try { ps.off?.('data', onDataProc); } catch {} };
+  }, []);
 
   // Process-level stdin capture when /keydebug is armed (works even if Ink stdin misses it)
   useEffect(() => {
