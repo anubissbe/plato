@@ -11,7 +11,7 @@ export async function runTui() {
 
 function App() {
   const { exit } = useApp();
-  const { stdin } = useStdin();
+  const { stdin, setRawMode, isRawModeSupported } = useStdin();
   const [input, setInput] = useState('');
   const [lines, setLines] = useState<string[]>(["Welcome to Plato. Type /help to get started."]);
   const [status, setStatus] = useState<string>('');
@@ -20,6 +20,12 @@ function App() {
   const [keyDebug, setKeyDebug] = useState<boolean>(false);
 
   useEffect(() => { (async () => setCfg(await loadConfig()))(); }, []);
+
+  // Ensure raw mode so we can capture control keys reliably (WSL-friendly)
+  useEffect(() => {
+    try { if (isRawModeSupported) setRawMode?.(true); } catch {}
+    return () => { try { if (isRawModeSupported) setRawMode?.(false); } catch {} };
+  }, [setRawMode, isRawModeSupported]);
 
   // Raw stdin fallback for backspace across terminals (WSL, etc.)
   useEffect(() => {
@@ -40,7 +46,7 @@ function App() {
           return b < 32 ? `^${String.fromCharCode(b+64)}` : ch;
         }).join(' ');
         setLines(prev=>prev.concat(`keydebug: dec=[${dec}] hex=[${hex}] names=[${names}]`));
-        setKeyDebug(false);
+        if (bytes.includes(0x7f) || bytes.includes(0x08)) setKeyDebug(false);
       }
       // Handle DEL (0x7F) and BS (0x08)
       for (const b of data) {
