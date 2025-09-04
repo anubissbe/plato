@@ -30,7 +30,7 @@ export const SLASH_COMMANDS: SlashCommand[] = [
   { name: '/resume', summary: 'Resume a paused conversation' },
   { name: '/privacy-settings', summary: 'View and update privacy settings' },
   { name: '/release-notes', summary: 'Show Plato release notes' },
+  { name: '/keydebug', summary: 'Capture next key raw bytes (debug)' },
 ];
 
 export const SLASH_MAP = new Map(SLASH_COMMANDS.map(c => [c.name, c] as const));
-

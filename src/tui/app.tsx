@@ -17,6 +17,7 @@ function App() {
   const [status, setStatus] = useState<string>('');
   const [cfg, setCfg] = useState<any>(null);
   const [confirm, setConfirm] = useState<null | { question: string; proceed: () => Promise<void> }>(null);
+  const [keyDebug, setKeyDebug] = useState<boolean>(false);
 
   useEffect(() => { (async () => setCfg(await loadConfig()))(); }, []);
 
@@ -24,6 +25,23 @@ function App() {
   useEffect(() => {
     if (!stdin) return;
     const onData = (data: Buffer) => {
+      if (keyDebug) {
+        const bytes = Array.from(data.values());
+        const hex = bytes.map(b=>b.toString(16).padStart(2,'0')).join(' ');
+        const dec = bytes.join(' ');
+        const names = bytes.map(b => {
+          if (b===0x7f) return 'DEL';
+          if (b===0x08) return 'BS';
+          if (b===0x1b) return 'ESC';
+          if (b===0x0d) return 'CR';
+          if (b===0x0a) return 'LF';
+          if (b===0x09) return 'TAB';
+          const ch = String.fromCharCode(b);
+          return b < 32 ? `^${String.fromCharCode(b+64)}` : ch;
+        }).join(' ');
+        setLines(prev=>prev.concat(`keydebug: dec=[${dec}] hex=[${hex}] names=[${names}]`));
+        setKeyDebug(false);
+      }
       // Handle DEL (0x7F) and BS (0x08)
       for (const b of data) {
         if (b === 0x7f || b === 0x08) {
@@ -107,6 +125,11 @@ function App() {
         const { getAuthInfo } = await import('../providers/copilot.js');
         const auth = await getAuthInfo();
         setLines(prev => prev.concat(`status: provider=${cfg.provider?.active} model=${cfg.model?.active} account=${auth.user?.login ?? (auth.loggedIn ? 'logged-in' : 'logged-out')}`));
+      }
+      if (text === '/keydebug') {
+        setKeyDebug(true);
+        setLines(prev=>prev.concat('keydebug: armed. Press your Backspace now; first key bytes will be printed.'));
+        return;
       }
       if (text === '/login') {
         const { loginCopilot } = await import('../providers/copilot.js');
