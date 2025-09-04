@@ -15,6 +15,7 @@ export type Config = {
   };
   model?: { active?: string };
   statusline?: { format?: string };
+  editing?: { autoApply?: 'on'|'off' };
   privacy?: { redact?: boolean; prompt_on_large_payloads?: boolean; max_payload_mb?: number };
   context?: {
     roots?: string[];
@@ -53,6 +54,7 @@ export async function loadConfig(): Promise<Config> {
   if (!cached.provider.copilot.chat_path) cached.provider.copilot.chat_path = '/v1/chat/completions';
   if (!cached.model) cached.model = { active: 'gpt-4o' };
   else if (!cached.model.active) cached.model.active = 'gpt-4o';
+  if (!cached.editing) cached.editing = { autoApply: 'off' };
   if (!cached.context) cached.context = { roots: [process.cwd()], selected: [] };
   if (!cached.toolCallPreset) cached.toolCallPreset = { enabled: true, strictOnly: true };
   return cached;

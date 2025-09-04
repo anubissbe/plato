@@ -1,7 +1,9 @@
 import { chatCompletions, chatStream } from '../providers/chat_fallback.js';
+import { dryRunApply, apply as applyPatch } from '../tools/patch.js';
+import { reviewPatch } from '../policies/security.js';
+import { checkPermission } from '../tools/permissions.js';
 import { runHooks } from '../tools/hooks.js';
 import fs from 'fs/promises';
-import { checkPermission } from '../tools/permissions.js';
 import { callTool } from '../integrations/mcp.js';
 import { loadConfig } from '../config.js';
 
@@ -53,6 +55,7 @@ export const orchestrator = {
     await runHooks('post-response');
     // Extract pending patch blocks if present
     pendingPatch = extractPatch(assistant) || null;
+    await maybeAutoApply(pendingPatch, onEvent);
     await maybeBridgeTool(assistant, onEvent);
     await saveSessionDefault();
     return assistant;
@@ -74,6 +77,7 @@ export const orchestrator = {
     history.push({ role: 'assistant', content: assistant });
     await runHooks('post-response');
     pendingPatch = extractPatch(assistant) || null;
+    await maybeAutoApply(pendingPatch, onEvent);
     await maybeBridgeTool(assistant, onEvent, onDelta);
     await saveSessionDefault();
     return assistant;
@@ -239,6 +243,30 @@ async function saveSessionDefault() {
     const data = { history, metrics };
     await fs.writeFile(file, JSON.stringify(data, null, 2), 'utf8');
   } catch {}
+}
+
+async function maybeAutoApply(patch: string | null, onEvent?: (e: OrchestratorEvent)=>void) {
+  if (!patch) return;
+  const cfg = await loadConfig();
+  if (cfg.editing?.autoApply !== 'on') return;
+  // Security review
+  const issues = reviewPatch(patch);
+  const high = issues.find(i=>i.severity==='high');
+  if (high) { onEvent?.({ type: 'info', message: `auto-apply blocked by security review: ${high.message}` }); return; }
+  // Permissions
+  const decision = await checkPermission({ tool: 'fs_patch', path: '*' });
+  if (decision !== 'allow') { onEvent?.({ type: 'info', message: `auto-apply requires permission: fs_patch => ${decision}` }); return; }
+  // Dry-run
+  const dry = await dryRunApply(patch);
+  if (!dry.ok) { onEvent?.({ type: 'info', message: `auto-apply check failed: ${dry.conflicts.slice(0,2).join(' | ')}` }); return; }
+  // Apply
+  try {
+    await applyPatch(patch);
+    onEvent?.({ type: 'info', message: 'auto-applied patch.' });
+    pendingPatch = null;
+  } catch (e: any) {
+    onEvent?.({ type: 'info', message: `auto-apply error: ${e?.message || e}` });
+  }
 }
 
 function getToolCallOneLiner(modelId: string, cfg?: any): string {

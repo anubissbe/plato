@@ -287,6 +287,18 @@ function App() {
         setLines(prev=>prev.concat('usage: /proxy [start|stop] [--port N]'));
         return;
       }
+      if (text.startsWith('/apply-mode')) {
+        const parts = text.split(/\s+/);
+        const mode = parts[1];
+        if (mode === 'auto' || mode === 'off') {
+          await setConfigValue('editing', JSON.stringify({ autoApply: mode === 'auto' ? 'on' : 'off' }));
+          setCfg(await loadConfig());
+          setLines(prev=>prev.concat(`apply-mode set to ${mode}`));
+        } else {
+          setLines(prev=>prev.concat('usage: /apply-mode [auto|off]'));
+        }
+        return;
+      }
       if (text.startsWith('/todos')) {
         const parts = text.split(/\s+/).slice(1);
         if (!parts.length || parts[0] === 'list') {

@@ -5,6 +5,7 @@ import path from 'path';
 export type UnifiedDiff = string;
 
 export async function dryRunApply(diff: UnifiedDiff): Promise<{ ok: boolean; conflicts: string[] }>{
+  diff = sanitizeDiff(diff);
   await ensureGitRepo();
   const tmp = await writeTemp(diff);
   try {
@@ -17,6 +18,7 @@ export async function dryRunApply(diff: UnifiedDiff): Promise<{ ok: boolean; con
 }
 
 export async function apply(diff: UnifiedDiff): Promise<void> {
+  diff = sanitizeDiff(diff);
   await ensureGitRepo();
   const tmp = await writeTemp(diff);
   try {
@@ -26,6 +28,7 @@ export async function apply(diff: UnifiedDiff): Promise<void> {
 }
 
 export async function revert(diff: UnifiedDiff): Promise<void> {
+  diff = sanitizeDiff(diff);
   await ensureGitRepo();
   const tmp = await writeTemp(diff);
   try {
@@ -85,4 +88,14 @@ async function ensureGitRepo() {
   } catch {
     throw new Error('Patch application requires a Git repository. Run `git init` in this folder and try again.');
   }
+}
+
+function sanitizeDiff(input: string): string {
+  let s = input || '';
+  // Extract inner of *** Begin Patch / *** End Patch if present
+  const m = s.match(/\*\*\* Begin Patch[\s\S]*?\n([\s\S]*?)\n\*\*\* End Patch/);
+  if (m) s = m[1];
+  // Remove fenced code block markers like ``` or ```diff
+  s = s.replace(/^```.*$/gm, '').trim();
+  return s;
 }

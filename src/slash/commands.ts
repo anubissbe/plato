@@ -31,6 +31,7 @@ export const SLASH_COMMANDS: SlashCommand[] = [
   { name: '/privacy-settings', summary: 'View and update privacy settings' },
   { name: '/release-notes', summary: 'Show Plato release notes' },
   { name: '/keydebug', summary: 'Capture next key raw bytes (debug)' },
+  { name: '/apply-mode', summary: 'Auto-apply patches: [auto|off]' },
 ];
 
 export const SLASH_MAP = new Map(SLASH_COMMANDS.map(c => [c.name, c] as const));
