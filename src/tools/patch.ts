@@ -92,10 +92,15 @@ async function ensureGitRepo() {
 
 function sanitizeDiff(input: string): string {
   let s = input || '';
-  // Extract inner of *** Begin Patch / *** End Patch if present
-  const m = s.match(/\*\*\* Begin Patch[\s\S]*?\n([\s\S]*?)\n\*\*\* End Patch/);
-  if (m) s = m[1];
+  // Remove explicit patch markers if present (with optional trailing asterisks)
+  s = s.replace(/^\*\*\*\s+Begin Patch.*$/gmi, '');
+  s = s.replace(/^\*\*\*\s+End Patch.*$/gmi, '');
   // Remove fenced code block markers like ``` or ```diff
-  s = s.replace(/^```.*$/gm, '').trim();
+  s = s.replace(/^```.*$/gm, '');
+  // Normalize line endings and trim
+  s = s.replace(/\r\n?/g, '\n').trim();
+  // Ensure traditional unified diff headers use a/ and b/ prefixes for git apply friendliness
+  s = s.replace(/^---\s+(?!a\/)(?!\/dev\/null)([^\n]+)$/gm, '--- a/$1');
+  s = s.replace(/^\+\+\+\s+(?!b\/)(?!\/dev\/null)([^\n]+)$/gm, '+++ b/$1');
   return s;
 }
