@@ -1,5 +1,5 @@
 import React, { useEffect, useMemo, useState } from 'react';
-import { Box, Text, render, useApp, useInput } from 'ink';
+import { Box, Text, render, useApp, useInput, useStdin } from 'ink';
 import { loadConfig, setConfigValue } from '../config.js';
 import { SLASH_COMMANDS } from '../slash/commands.js';
 import { orchestrator } from '../runtime/orchestrator.js';
@@ -11,6 +11,7 @@ export async function runTui() {
 
 function App() {
   const { exit } = useApp();
+  const { stdin } = useStdin();
   const [input, setInput] = useState('');
   const [lines, setLines] = useState<string[]>(["Welcome to Plato. Type /help to get started."]);
   const [status, setStatus] = useState<string>('');
@@ -18,6 +19,23 @@ function App() {
   const [confirm, setConfirm] = useState<null | { question: string; proceed: () => Promise<void> }>(null);
 
   useEffect(() => { (async () => setCfg(await loadConfig()))(); }, []);
+
+  // Raw stdin fallback for backspace across terminals (WSL, etc.)
+  useEffect(() => {
+    if (!stdin) return;
+    const onData = (data: Buffer) => {
+      // Handle DEL (0x7F) and BS (0x08)
+      for (const b of data) {
+        if (b === 0x7f || b === 0x08) {
+          setInput(s => s.slice(0, -1));
+          // Don't break; allow multiple repeats in one chunk
+        }
+      }
+    };
+    // @ts-ignore node types
+    stdin.on('data', onData);
+    return () => { /* @ts-ignore */ stdin.off?.('data', onData); };
+  }, [stdin]);
 
   useInput((inputKey, key) => {
     if (confirm) {
