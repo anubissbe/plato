@@ -30,9 +30,10 @@ function App() {
   // Raw stdin fallback for backspace across terminals (WSL, etc.)
   useEffect(() => {
     if (!stdin) return;
-    const onData = (data: Buffer) => {
+    const onData = (data: any) => {
+      const buf: Buffer = Buffer.isBuffer(data) ? data : (typeof data === 'string' ? Buffer.from(data, 'utf8') : Buffer.from(data));
       if (keyDebug) {
-        const bytes = Array.from(data.values());
+        const bytes = Array.from(buf.values());
         const hex = bytes.map(b=>b.toString(16).padStart(2,'0')).join(' ');
         const dec = bytes.join(' ');
         const names = bytes.map(b => {
@@ -49,7 +50,7 @@ function App() {
         if (bytes.includes(0x7f) || bytes.includes(0x08)) setKeyDebug(false);
       }
       // Handle DEL (0x7F) and BS (0x08)
-      for (const b of data) {
+      for (const b of buf) {
         if (b === 0x7f || b === 0x08) {
           setInput(s => s.slice(0, -1));
           // Don't break; allow multiple repeats in one chunk
@@ -73,8 +74,9 @@ function App() {
       }
       if (ps.resume) ps.resume();
     } catch {}
-    const onDataProc = (data: Buffer) => {
-      const bytes = Array.from(data.values());
+    const onDataProc = (data: any) => {
+      const buf: Buffer = Buffer.isBuffer(data) ? data : (typeof data === 'string' ? Buffer.from(data, 'utf8') : Buffer.from(data));
+      const bytes = Array.from(buf.values());
       const hex = bytes.map(b=>b.toString(16).padStart(2,'0')).join(' ');
       const dec = bytes.join(' ');
       const names = bytes.map(b => {
