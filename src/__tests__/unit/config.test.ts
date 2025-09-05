@@ -149,6 +149,13 @@ describe('config', () => {
     });
 
     it('should handle nested key paths', async () => {
+      const fileNotFoundError = new Error('File not found') as NodeJS.ErrnoException;
+      fileNotFoundError.code = 'ENOENT';
+      (fs.readFile as jest.Mock).mockRejectedValue(fileNotFoundError);
+      (fs.mkdir as jest.Mock).mockResolvedValue(undefined);
+      (fs.writeFile as jest.Mock).mockResolvedValue(undefined);
+      (YAML.stringify as jest.Mock).mockImplementation((obj) => JSON.stringify(obj));
+
       const { setConfigValue } = await import('../../config');
       
       await setConfigValue('model.active', 'claude-3');
@@ -158,6 +165,13 @@ describe('config', () => {
     });
 
     it('should create nested objects if they do not exist', async () => {
+      const fileNotFoundError = new Error('File not found') as NodeJS.ErrnoException;
+      fileNotFoundError.code = 'ENOENT';
+      (fs.readFile as jest.Mock).mockRejectedValue(fileNotFoundError);
+      (fs.mkdir as jest.Mock).mockResolvedValue(undefined);
+      (fs.writeFile as jest.Mock).mockResolvedValue(undefined);
+      (YAML.stringify as jest.Mock).mockImplementation((obj) => JSON.stringify(obj));
+
       const { setConfigValue } = await import('../../config');
       
       await setConfigValue('deeply.nested.key', 'value');
