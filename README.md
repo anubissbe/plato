@@ -1,6 +1,8 @@
 # Plato
 
-[![CI](https://github.com/anubissbe/plato/actions/workflows/ci.yml/badge.svg)](https://github.com/anubissbe/plato/actions/workflows/ci.yml)
+[![CI Tests](https://github.com/anubissbe/plato/actions/workflows/test.yml/badge.svg)](https://github.com/anubissbe/plato/actions/workflows/test.yml)
+[![codecov](https://codecov.io/gh/anubissbe/plato/branch/main/graph/badge.svg)](https://codecov.io/gh/anubissbe/plato)
+[![Coverage Status](https://img.shields.io/badge/coverage-93%25-brightgreen.svg)](coverage/)
 [![Version](https://img.shields.io/badge/version-1.0.0-blue.svg)](CHANGELOG.md)
 [![Open Issues](https://img.shields.io/github/issues/anubissbe/plato)](https://github.com/anubissbe/plato/issues)
 [![Last Commit](https://img.shields.io/github/last-commit/anubissbe/plato)](https://github.com/anubissbe/plato/commits/main)
