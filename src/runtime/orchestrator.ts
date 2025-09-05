@@ -9,8 +9,9 @@ import { callTool } from '../integrations/mcp.js';
 import { loadConfig } from '../config.js';
 import { MemoryManager } from '../memory/manager.js';
 import type { MemoryEntry } from '../memory/types.js';
+import { SemanticAnalyzer } from '../context/semantic-analyzer.js';
 
-type Msg = { role: 'system'|'user'|'assistant'|'tool', content: string };
+export type Msg = { role: 'system'|'user'|'assistant'|'tool', content: string };
 const history: Msg[] = [
   { role: 'system', content: [
     'You are Plato, an expert coding assistant. Keep answers concise and propose safe diffs.',
@@ -45,6 +46,9 @@ let backgroundMode: boolean = false;
 
 // Memory manager instance
 let memoryManager: MemoryManager | null = null;
+
+// Semantic analyzer instance
+const semanticAnalyzer = new SemanticAnalyzer();
 
 type OrchestratorEvent = { type: 'tool-start'|'tool-end'|'info'; message: string };
 
@@ -192,6 +196,125 @@ export const orchestrator = {
     }
     
     return { originalLength, newLength: history.length };
+  },
+  
+  /**
+   * Enhanced compaction using semantic analysis for intelligent content preservation
+   */
+  compactHistoryWithSemanticAnalysis(targetRetention: number = 0.4): { 
+    originalLength: number; 
+    newLength: number; 
+    preservationScore: number;
+    removedTopics: string[];
+    preservedTopics: string[];
+  } {
+    const originalLength = history.length;
+    if (originalLength <= 5) {
+      return { 
+        originalLength, 
+        newLength: originalLength, 
+        preservationScore: 1.0,
+        removedTopics: [],
+        preservedTopics: []
+      };
+    }
+
+    // Analyze conversation semantics
+    const importanceScores = semanticAnalyzer.scoreImportance(history);
+    const topics = semanticAnalyzer.identifyTopics(history);
+    const breakpoints = semanticAnalyzer.detectBreakpoints(history);
+    const topicClusters = semanticAnalyzer.clusterByTopic(history);
+
+    // Calculate how many messages to keep
+    const targetKeep = Math.max(5, Math.ceil(originalLength * targetRetention));
+    
+    // Always preserve system messages
+    const systemMessages = history.filter((msg, index) => {
+      if (msg.role === 'system') return { msg, index, score: 1.0 };
+      return null;
+    }).filter(Boolean);
+
+    // Score and rank non-system messages
+    const rankedMessages = history
+      .map((msg, index) => ({ msg, index, score: importanceScores[index] }))
+      .filter(item => item.msg.role !== 'system')
+      .sort((a, b) => b.score - a.score);
+
+    // Ensure conversation coherence by preserving message sequences
+    const selectedIndices = new Set<number>();
+    
+    // Add high-importance messages
+    const highImportanceThreshold = Math.max(0.6, 
+      rankedMessages.length > 0 ? rankedMessages[Math.floor(rankedMessages.length * 0.3)]?.score || 0.6 : 0.6
+    );
+    
+    rankedMessages
+      .filter(item => item.score >= highImportanceThreshold)
+      .slice(0, Math.ceil(targetKeep * 0.6)) // Use 60% of budget for high importance
+      .forEach(item => selectedIndices.add(item.index));
+
+    // Add recent messages to maintain current context
+    const recentCount = Math.min(Math.ceil(targetKeep * 0.3), 10);
+    for (let i = Math.max(0, history.length - recentCount); i < history.length; i++) {
+      selectedIndices.add(i);
+    }
+
+    // Fill remaining budget with semantically important messages
+    const remainingBudget = targetKeep - selectedIndices.size;
+    if (remainingBudget > 0) {
+      rankedMessages
+        .filter(item => !selectedIndices.has(item.index))
+        .slice(0, remainingBudget)
+        .forEach(item => selectedIndices.add(item.index));
+    }
+
+    // Ensure conversation flow by adding bridging messages
+    const sortedIndices = Array.from(selectedIndices).sort((a, b) => a - b);
+    const gaps = [];
+    for (let i = 1; i < sortedIndices.length; i++) {
+      const gap = sortedIndices[i] - sortedIndices[i-1];
+      if (gap > 3) { // If gap is too large, add bridging message
+        gaps.push({
+          start: sortedIndices[i-1],
+          end: sortedIndices[i],
+          size: gap
+        });
+      }
+    }
+
+    // Add bridging messages for the largest gaps
+    gaps
+      .sort((a, b) => b.size - a.size)
+      .slice(0, Math.min(3, Math.floor(targetKeep * 0.1))) // Use up to 10% budget for bridging
+      .forEach(gap => {
+        const bridgeIndex = Math.floor((gap.start + gap.end) / 2);
+        selectedIndices.add(bridgeIndex);
+      });
+
+    // Build final message list
+    const finalIndices = Array.from(selectedIndices).sort((a, b) => a - b);
+    const preservedMessages = finalIndices.map(i => history[i]);
+    
+    // Analyze what topics were preserved vs removed
+    const preservedTopicClusters = semanticAnalyzer.clusterByTopic(preservedMessages);
+    const preservedTopics = Array.from(preservedTopicClusters.keys());
+    const removedTopics = topics.filter(topic => !preservedTopics.includes(topic));
+
+    // Calculate preservation score (percentage of important content preserved)
+    const totalImportanceScore = importanceScores.reduce((sum, score) => sum + score, 0);
+    const preservedImportanceScore = finalIndices.reduce((sum, index) => sum + importanceScores[index], 0);
+    const preservationScore = totalImportanceScore > 0 ? preservedImportanceScore / totalImportanceScore : 1.0;
+
+    // Update history
+    history.splice(0, history.length, ...preservedMessages);
+
+    return {
+      originalLength,
+      newLength: history.length,
+      preservationScore,
+      removedTopics,
+      preservedTopics
+    };
   },
   async getMemory(): Promise<string[]> { 
     try {
