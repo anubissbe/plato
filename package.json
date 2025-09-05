@@ -24,12 +24,18 @@
     "test:ci": "jest --ci --coverage --maxWorkers=2"
   },
   "dependencies": {
+    "@types/react": "^19.1.12",
     "cross-fetch": "^4.0.0",
     "eventsource-parser": "^1.1.2",
+    "execa": "^9.6.0",
+    "fast-glob": "^3.3.3",
     "ink": "^6.2.3",
+    "ink-spinner": "^5.0.0",
+    "keytar": "^7.9.0",
     "picocolors": "^1.0.0",
     "prompts": "^2.4.2",
     "react": "^19.1.1",
+    "yaml": "^2.8.1",
     "yargs": "^17.7.2"
   },
   "devDependencies": {

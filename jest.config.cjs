@@ -6,6 +6,9 @@ module.exports = {
   moduleNameMapper: {
     '^(\\.{1,2}/.*)\\.js$': '$1',
   },
+  transformIgnorePatterns: [
+    'node_modules/(?!(execa|@sindresorhus/merge-streams|cross-spawn|figures|get-stream|human-signals|is-plain-obj|is-stream|npm-run-path|pretty-ms|signal-exit|strip-final-newline|yoctocolors)/)',
+  ],
   transform: {
     '^.+\\.tsx?$': [
       'ts-jest',
