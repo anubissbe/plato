@@ -46,7 +46,7 @@ main:
   required_linear_history: false
   
   # Include administrators
-  include_administrators: false
+  include_administrators: true
   
   # Block force pushes
   block_creations: false
