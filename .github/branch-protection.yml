@@ -1,0 +1,73 @@
+# Branch Protection Rules Configuration
+# This file documents the recommended branch protection settings for the repository
+# These settings should be configured in GitHub repository settings
+
+main:
+  # Require pull request reviews before merging
+  required_pull_request_reviews:
+    dismiss_stale_reviews: true
+    require_code_owner_reviews: false
+    required_approving_review_count: 1
+    
+  # Require status checks to pass before merging
+  required_status_checks:
+    strict: true  # Require branches to be up-to-date before merging
+    contexts:
+      - "Test Node 18 on ubuntu-latest"
+      - "Test Node 20 on ubuntu-latest"
+      - "Test Node 22 on ubuntu-latest"
+      - "Test Node 18 on macos-latest"
+      - "Test Node 20 on macos-latest"
+      - "Test Node 22 on macos-latest"
+      - "Test Node 18 on windows-latest"
+      - "Test Node 20 on windows-latest"
+      - "Test Node 22 on windows-latest"
+      - "Coverage Check"
+      - "Performance Check"
+      - "All Checks Passed"
+  
+  # Require conversation resolution before merging
+  required_conversation_resolution: true
+  
+  # Enforce all configured restrictions for administrators
+  enforce_admins: false
+  
+  # Restrict who can push to the branch
+  restrictions:
+    users: []
+    teams: []
+    apps: []
+  
+  # Allow force pushes and deletions
+  allow_force_pushes: false
+  allow_deletions: false
+  
+  # Require linear history
+  required_linear_history: false
+  
+  # Include administrators
+  include_administrators: true
+  
+  # Block force pushes
+  block_creations: false
+  
+  # Lock branch
+  lock_branch: false
+
+develop:
+  # More relaxed rules for develop branch
+  required_pull_request_reviews:
+    dismiss_stale_reviews: false
+    require_code_owner_reviews: false
+    required_approving_review_count: 1
+    
+  required_status_checks:
+    strict: false
+    contexts:
+      - "Test Node 20 on ubuntu-latest"  # Only require primary test
+      - "Coverage Check"
+  
+  required_conversation_resolution: true
+  enforce_admins: false
+  allow_force_pushes: false
+  allow_deletions: false
