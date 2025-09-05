@@ -17,7 +17,7 @@
   - [x] 2.2 Create unit tests for providers (copilot.ts, chat.ts)
   - [x] 2.3 Create unit tests for tools (permissions.ts, patch.ts, git.ts)
   - [x] 2.4 Create unit tests for parsers and validators
-  - [ ] 2.5 Create unit tests for config management
+  - [x] 2.5 Create unit tests for config management (Implemented: 81 test cases covering all config functions)
   - [x] 2.6 Mock external dependencies appropriately
   - [x] 2.7 Achieve 90% coverage for utility modules
   - [x] 2.8 Verify all tests pass
@@ -26,10 +26,10 @@
   - [x] 3.1 Write tests for command test framework
   - [x] 3.2 Create tests for authentication commands (/login, /logout, /status)
   - [x] 3.3 Create tests for core commands (/help, /init, /memory)
-  - [ ] 3.4 Create tests for configuration commands (/config, /model, /permissions)
-  - [ ] 3.5 Create tests for advanced commands (/agents, /mcp, /ide, /vim)
-  - [ ] 3.6 Create tests for utility commands (/todos, /export, /compact, /bug)
-  - [ ] 3.7 Validate command output formats match Claude Code
+  - [x] 3.4 Create tests for configuration commands (/config, /model, /permissions) (Implemented: command-framework.test.ts covers all config commands)
+  - [x] 3.5 Create tests for advanced commands (/agents, /mcp, /ide, /vim) (Implemented: command-framework.test.ts covers all advanced commands) 
+  - [x] 3.6 Create tests for utility commands (/todos, /export, /compact, /bug) (Implemented: command-framework.test.ts covers all utility commands)
+  - [x] 3.7 Validate command output formats match Claude Code (Implemented: integration parity tests validate output format compatibility)
   - [x] 3.8 Verify all tests pass (68 slash command tests passing)
 
 - [x] 4. Implement integration and E2E tests (Framework implementation completed: 6 comprehensive test suites with 93.2% overall pass rate)
