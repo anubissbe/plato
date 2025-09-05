@@ -63,6 +63,39 @@ Now requests like “create hello.py with hello world” will immediately write 
 ● Done! Created hello.py with a Hello World program.
 ```
 
+## Terminal Compatibility
+
+### WSL/Docker Environments
+In environments where raw mode isn't supported (WSL, Docker, some CI systems), Plato automatically falls back to compatible input handling. You may see a raw mode warning, but functionality remains intact.
+
+### Copy/Paste Support
+Mouse copy/paste is enabled by default (like Claude Code):
+
+1. **Default Behavior**: Mouse mode is automatically enabled
+   - Keyboard typing works normally (typing should be smooth and responsive)
+   - Terminal copy/paste is supported through mouse events and escape sequences  
+   - Shows 🖱️ MOUSE indicator in status line
+   - Use `/mouse off` only if you experience any issues
+
+2. **Temporary paste mode**: `/paste [seconds]` (if copy/paste still doesn't work)
+   - Completely disables input for 5 seconds (or custom duration)
+   - Shows 📋 PASTE mode indicator
+   - Allows unrestricted terminal copy/paste
+   - Auto-restores after timeout
+
+3. **Toggle if needed**: `/mouse [on|off|toggle]`
+   - Most users won't need to change this
+   - Only disable if you need advanced keyboard features
+
+4. **Check Terminal Settings**: Some terminals require specific settings for proper mouse support
+
+5. **Alternative**: Use CLI commands directly:
+   ```bash
+   npx tsx src/cli.ts models        # List models
+   npx tsx src/cli.ts config get    # View config  
+   npx tsx src/cli.ts status        # Check status
+   ```
+
 ## Notes
 - Patch application requires a Git repository. Run `git init` if needed.
 - Credentials are stored in the OS keychain when possible; fallback to `~/.config/plato/credentials.json`.

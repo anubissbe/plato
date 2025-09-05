@@ -142,6 +142,57 @@ export const orchestrator = {
   getMetrics() { return { ...metrics }; },
   getHistory() { return [...history]; },
   compactHistory(keep: number) { if (keep > 0 && history.length > keep) history.splice(0, history.length - keep); },
+  compactHistoryWithFocus(instructions?: string): { originalLength: number; newLength: number } {
+    const originalLength = history.length;
+    if (originalLength <= 5) return { originalLength, newLength: originalLength }; // Keep minimal history
+    
+    // Smart compaction strategy based on instructions
+    const systemMessages = history.filter(m => m.role === 'system');
+    const userMessages = history.filter(m => m.role === 'user');
+    const assistantMessages = history.filter(m => m.role === 'assistant');
+    const toolMessages = history.filter(m => m.role === 'tool');
+    
+    let keep = Math.ceil(originalLength * 0.3); // Default 30% retention
+    
+    if (instructions) {
+      const focusKeywords = instructions.toLowerCase();
+      
+      // Adjust retention based on focus instructions
+      if (focusKeywords.includes('error') || focusKeywords.includes('debug')) {
+        // Keep more messages for error context
+        keep = Math.ceil(originalLength * 0.5);
+      } else if (focusKeywords.includes('recent') || focusKeywords.includes('latest')) {
+        // Keep fewer, more recent messages
+        keep = Math.ceil(originalLength * 0.2);
+      } else if (focusKeywords.includes('context') || focusKeywords.includes('history')) {
+        // Keep more for context preservation
+        keep = Math.ceil(originalLength * 0.6);
+      }
+      
+      // Filter messages based on focus content
+      const relevantMessages = history.filter(msg => {
+        const content = msg.content.toLowerCase();
+        return focusKeywords.split(' ').some(keyword => 
+          keyword.length > 2 && content.includes(keyword.toLowerCase())
+        );
+      });
+      
+      if (relevantMessages.length > 0) {
+        // Prioritize relevant messages but ensure we have recent context
+        const recentMessages = history.slice(-Math.max(5, Math.ceil(keep / 2)));
+        const uniqueMessages = [...new Set([...relevantMessages, ...recentMessages])];
+        history.splice(0, history.length, ...systemMessages.slice(0, 1), ...uniqueMessages.slice(-keep));
+      } else {
+        // Fallback to simple compaction
+        this.compactHistory(keep);
+      }
+    } else {
+      // Default compaction strategy - keep system messages and recent conversation
+      this.compactHistory(keep);
+    }
+    
+    return { originalLength, newLength: history.length };
+  },
   async getMemory(): Promise<string[]> { 
     try {
       const manager = await ensureMemoryManager();

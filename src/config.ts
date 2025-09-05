@@ -2,6 +2,7 @@ import fs from 'fs/promises';
 import path from 'path';
 import os from 'os';
 import YAML from 'yaml';
+import type { OutputStyle } from './styles/types.js';
 
 export type Config = {
   provider?: {
@@ -34,6 +35,10 @@ export type Config = {
     messageOverride?: string;    // custom one-liner message
     overrides?: Record<string, string>; // per-model overrides by model id
   }
+  outputStyle?: {
+    active?: string;
+    custom?: OutputStyle[];
+  };
 };
 
 const HOME = os.homedir();
@@ -91,11 +96,29 @@ export async function setConfigValue(key: string, value: string): Promise<void> 
   }
   
   const cfgObj = await loadConfig();
-  (cfgObj as any)[key] = parsedValue;
+  
+  // Handle nested keys like 'model.active'
+  const keyParts = key.split('.');
+  if (keyParts.length === 1) {
+    // Simple key
+    (cfgObj as any)[key] = parsedValue;
+  } else {
+    // Nested key
+    let current = cfgObj as any;
+    for (let i = 0; i < keyParts.length - 1; i++) {
+      const part = keyParts[i];
+      if (!current[part]) {
+        current[part] = {};
+      }
+      current = current[part];
+    }
+    current[keyParts[keyParts.length - 1]] = parsedValue;
+  }
+  
   await saveConfig(cfgObj);
 }
 
-async function saveConfig(cfg: Config): Promise<void> {
+export async function saveConfig(cfg: Config): Promise<void> {
   await fs.mkdir(GLOBAL_DIR, { recursive: true });
   await fs.writeFile(GLOBAL_CFG, YAML.stringify(cfg), 'utf8');
   cached = null;

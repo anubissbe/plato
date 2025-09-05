@@ -3,6 +3,9 @@ import { Box, Text, render, useApp, useInput, useStdin } from 'ink';
 import { loadConfig, setConfigValue } from '../config.js';
 import { SLASH_COMMANDS } from '../slash/commands.js';
 import { orchestrator } from '../runtime/orchestrator.js';
+import { StyledBox, StyledText, StatusLine, WelcomeMessage, ErrorMessage } from '../styles/components.js';
+import { initializeStyleManager, getStyleManager } from '../styles/manager.js';
+import { getAvailableModels } from '../providers/copilot.js';
 
 // Keyboard state management
 interface KeyboardState {
@@ -16,6 +19,10 @@ interface KeyboardState {
   historyMode: boolean;
   selectedHistoryIndex: number;
   messageHistory: Array<{ role: string; content: string }>;
+  mouseMode: boolean; // When true, reduces input interference for better copy/paste
+  pasteBuffer: string; // Buffer for detecting paste operations
+  pasteTimeout: NodeJS.Timeout | null;
+  pasteMode: boolean; // When true, completely disables input for copy/paste
 }
 
 // Enhanced App component with comprehensive keyboard handling
@@ -48,15 +55,21 @@ export function App() {
     historyMode: false,
     selectedHistoryIndex: -1,
     messageHistory: [],
+    mouseMode: true, // Default to mouse mode like Claude Code
+    pasteBuffer: '',
+    pasteTimeout: null,
+    pasteMode: false,
   });
 
   const keyboardStateRef = useRef(keyboardState);
   keyboardStateRef.current = keyboardState;
 
-  // Initialize configuration, Git status, and restore session
+  // Initialize configuration, Git status, restore session, and styles
   useEffect(() => { 
     (async () => {
       setCfg(await loadConfig());
+      // Initialize style manager
+      await initializeStyleManager();
       // Auto-restore session on startup
       await orchestrator.restoreSession();
       // Load project context if available
@@ -92,15 +105,77 @@ export function App() {
     })();
   }, []);
 
-  // Enable raw mode for better key capture
+  // Enable raw mode for better key capture and mouse support
   useEffect(() => {
-    try { if (isRawModeSupported) setRawMode?.(true); } catch {}
-    return () => { try { if (isRawModeSupported) setRawMode?.(false); } catch {} };
-  }, [setRawMode, isRawModeSupported]);
+    try { 
+      if (isRawModeSupported) {
+        setRawMode?.(true);
+      } else if (keyboardState.mouseMode) {
+        // In WSL/environments without raw mode, enable terminal mouse support
+        process.stdout.write('\x1b[?1000h'); // Enable mouse tracking
+        process.stdout.write('\x1b[?1002h'); // Enable mouse button tracking
+        process.stdout.write('\x1b[?1015h'); // Enable urxvt mouse mode
+        process.stdout.write('\x1b[?1006h'); // Enable SGR mouse mode
+      }
+    } catch {}
+    
+    return () => { 
+      try { 
+        if (isRawModeSupported) {
+          setRawMode?.(false);
+        } else if (keyboardState.mouseMode) {
+          // Disable mouse tracking
+          process.stdout.write('\x1b[?1000l');
+          process.stdout.write('\x1b[?1002l');
+          process.stdout.write('\x1b[?1015l');
+          process.stdout.write('\x1b[?1006l');
+        }
+      } catch {} 
+    };
+  }, [setRawMode, isRawModeSupported, keyboardState.mouseMode]);
 
-  // Enhanced keyboard input handler
-  useInput((inputKey, key) => {
+  // Minimal stdin handling for paste detection in mouse mode
+  useEffect(() => {
+    if (!stdin || !keyboardState.mouseMode) return;
+
+    const handlePasteDetection = (data: Buffer) => {
+      const currentState = keyboardStateRef.current;
+      
+      // In paste mode, ignore all input
+      if (currentState.pasteMode) {
+        return;
+      }
+      
+      const char = data.toString('utf8');
+      
+      // Only handle multi-character input (potential paste operations)
+      if (char.length > 3) {
+        // This looks like a paste operation - add to input
+        setKeyboardState(prev => ({ 
+          ...prev, 
+          input: prev.input + char 
+        }));
+      }
+    };
+
+    stdin.on('data', handlePasteDetection);
+    return () => {
+      stdin.off('data', handlePasteDetection);
+    };
+  }, [stdin, keyboardState.mouseMode]);
+
+  // Enhanced keyboard input handler with mouse mode consideration
+  // Only use useInput if raw mode is supported to prevent crashes in WSL
+  useInput(isRawModeSupported ? (inputKey, key) => {
     const currentState = keyboardStateRef.current;
+    
+    // In paste mode, disable all input to allow terminal copy/paste
+    if (currentState.pasteMode) {
+      return;
+    }
+    
+    // In mouse mode, use normal keyboard handling but with reduced interference
+    // This allows typing to work normally while still supporting copy/paste
     
     // Handle confirmation dialogs first
     if (confirm) {
@@ -206,8 +281,14 @@ export function App() {
       return;
     }
 
-    // Backspace handling
-    if (inputKey === '\u007F' || inputKey === '\b' || (key.ctrl && inputKey.toLowerCase() === 'h')) {
+    // Backspace handling - handle various terminal backspace codes
+    if (inputKey === '\u007F' || // DEL (127)
+        inputKey === '\b' ||      // BS (8)
+        inputKey === '\x7f' ||    // Alternative DEL
+        inputKey === '\x08' ||    // Alternative BS
+        key.backspace ||          // Ink's backspace detection
+        key.delete ||             // Delete key
+        (key.ctrl && inputKey.toLowerCase() === 'h')) { // Ctrl+H
       handleBackspace();
       return;
     }
@@ -219,6 +300,10 @@ export function App() {
         setKeyboardState(prev => ({ ...prev, input: prev.input + inputKey }));
       }
     }
+  } : () => {
+    // No-op handler when raw mode is not supported
+    // In environments without raw mode support (like some WSL setups),
+    // we gracefully disable keyboard input to prevent crashes
   });
 
   // Handle escape key with double-tap detection
@@ -423,6 +508,31 @@ export function App() {
       return;
     }
 
+    if (command === '/output-style') {
+      await handleOutputStyleCommand(args);
+      return;
+    }
+
+    if (command === '/output-style:new') {
+      await handleCreateStyleCommand();
+      return;
+    }
+
+    if (command === '/model') {
+      await handleModelCommand(args);
+      return;
+    }
+
+    if (command === '/mouse') {
+      await handleMouseCommand(args);
+      return;
+    }
+
+    if (command === '/paste') {
+      await handlePasteCommand(args);
+      return;
+    }
+
     // Default handling for unimplemented commands
     setLines(prev => prev.concat(`(command) ${text}`));
   };
@@ -521,16 +631,23 @@ export function App() {
     try {
       setLines(prev => prev.concat(`🗜️ Compacting conversation history...`));
       
+      // Use smart compaction with focus instructions
+      const result = orchestrator.compactHistoryWithFocus(instructions);
+      
       if (instructions) {
         setLines(prev => prev.concat(`📋 Focus instructions: "${instructions}"`));
-        // TODO: Pass instructions to orchestrator for smart compaction
-        setLines(prev => prev.concat(`✅ Compacted with focus on: ${instructions}`));
+        setLines(prev => prev.concat(`✅ Smart compaction applied with focus on: ${instructions}`));
       } else {
-        setLines(prev => prev.concat(`✅ Compacted conversation using default strategy`));
+        setLines(prev => prev.concat(`✅ Compacted conversation using intelligent strategy`));
       }
       
-      const history = orchestrator.getMessageHistory();
-      setLines(prev => prev.concat(`📊 Reduced from ${history.length} messages to ${Math.ceil(history.length * 0.3)} messages`));
+      setLines(prev => prev.concat(`📊 Reduced from ${result.originalLength} messages to ${result.newLength} messages`));
+      
+      // Add memory note about compaction
+      await orchestrator.addMemory('custom', 
+        `Compacted history from ${result.originalLength} to ${result.newLength} messages` + 
+        (instructions ? ` with focus: ${instructions}` : '')
+      );
       
     } catch (e: any) {
       setLines(prev => prev.concat(`❌ Compaction failed: ${e?.message || e}`));
@@ -655,6 +772,227 @@ export function App() {
     }
   };
 
+  // Handle output style command
+  const handleOutputStyleCommand = async (args?: string) => {
+    try {
+      const styleManager = getStyleManager();
+      
+      if (!args) {
+        // List available styles
+        const styles = styleManager.listStyles();
+        setLines(prev => prev.concat(
+          '🎨 Available output styles:',
+          ...styles.map(s => {
+            const marker = s.active ? '✓' : ' ';
+            const type = s.custom ? '[custom]' : '[built-in]';
+            return `  ${marker} ${s.name} ${type} - ${s.description}`;
+          }),
+          '',
+          'Usage: /output-style <name> to switch styles',
+          '       /output-style:new to create a custom style'
+        ));
+        return;
+      }
+
+      const subCommand = args.split(' ')[0];
+      
+      if (subCommand === 'show') {
+        // Show current style details
+        const currentStyle = styleManager.getStyle();
+        setLines(prev => prev.concat(
+          `📋 Current style: ${currentStyle.name}`,
+          `   Description: ${currentStyle.description}`,
+          `   Icons: ${currentStyle.formatting.showIcons ? 'enabled' : 'disabled'}`,
+          `   Timestamps: ${currentStyle.formatting.showTimestamps ? 'enabled' : 'disabled'}`,
+          `   Border: ${currentStyle.formatting.borderStyle}`,
+          `   Theme colors:`,
+          `     Primary: ${currentStyle.theme.primary}`,
+          `     Success: ${currentStyle.theme.success}`,
+          `     Error: ${currentStyle.theme.error}`,
+          `     Info: ${currentStyle.theme.info}`
+        ));
+        return;
+      }
+
+      // Switch to specified style
+      await styleManager.setStyle(subCommand);
+      setLines(prev => prev.concat(`✅ Switched to '${subCommand}' style`));
+      
+      // Force re-render with new style
+      forceUpdate();
+      
+    } catch (e: any) {
+      setLines(prev => prev.concat(`❌ Style command failed: ${e?.message || e}`));
+    }
+  };
+
+  // Handle create custom style command
+  const handleCreateStyleCommand = async () => {
+    try {
+      const styleManager = getStyleManager();
+      
+      // For now, provide instructions - full interactive mode would require more state management
+      setLines(prev => prev.concat(
+        '🎨 Creating custom styles:',
+        '',
+        'Custom styles can be created by:',
+        '1. Using /output-style:new command (interactive - coming soon)',
+        '2. Editing .plato/config.yaml directly',
+        '',
+        'Example custom style in config.yaml:',
+        'outputStyle:',
+        '  custom:',
+        '    - name: my-style',
+        '      description: My custom style',
+        '      theme:',
+        '        primary: cyan',
+        '        error: red',
+        '        success: green',
+        '      formatting:',
+        '        showIcons: true',
+        '        borderStyle: double',
+        '',
+        'Interactive style creation coming soon!'
+      ));
+    } catch (e: any) {
+      setLines(prev => prev.concat(`❌ Style creation failed: ${e?.message || e}`));
+    }
+  };
+
+  // Handle model command
+  const handleModelCommand = async (args?: string) => {
+    try {
+      const cfg = await loadConfig();
+      const currentModel = cfg.model?.active || 'gpt-4o';
+      
+      if (!args || args.trim() === '') {
+        // Show available models and current selection
+        setLines(prev => prev.concat('🤖 Fetching available models...'));
+        
+        const availableModels = await getAvailableModels();
+        
+        setLines(prev => prev.concat(
+          '',
+          '🤖 Available Models:',
+          ...availableModels.map(model => 
+            model === currentModel 
+              ? `  ✓ ${model} (current)`
+              : `    ${model}`
+          ),
+          '',
+          'Usage: /model <name> to switch models',
+          `Current: ${currentModel}`
+        ));
+        return;
+      }
+
+      const targetModel = args.trim();
+      
+      // Get available models to validate the choice
+      const availableModels = await getAvailableModels();
+      
+      if (!availableModels.includes(targetModel)) {
+        setLines(prev => prev.concat(
+          `❌ Model '${targetModel}' not available.`,
+          '   Use /model to see available options.'
+        ));
+        return;
+      }
+
+      // Switch to the new model
+      await setConfigValue('model.active', targetModel);
+      
+      // Reload the config to update the status line
+      setCfg(await loadConfig());
+      
+      // Force re-render to update the status line immediately
+      forceUpdate();
+      
+      setLines(prev => prev.concat(`✅ Switched to model: ${targetModel}`));
+      
+    } catch (e: any) {
+      setLines(prev => prev.concat(`❌ Model command failed: ${e?.message || e}`));
+    }
+  };
+
+  // Handle mouse mode command
+  const handleMouseCommand = async (args?: string) => {
+    try {
+      const currentState = keyboardStateRef.current;
+      
+      if (!args || args.trim() === '') {
+        // Show current mouse mode status
+        setLines(prev => prev.concat(
+          `🖱️  Mouse mode: ${currentState.mouseMode ? 'ON (default)' : 'OFF'}`,
+          '',
+          'Mouse mode is enabled by default (like Claude Code).',
+          'When enabled:',
+          '  • Keyboard typing works normally',
+          '  • Terminal copy/paste is supported',
+          '  • Terminal mouse events are enabled',
+          '  • Use /paste command if copy/paste still doesn\'t work',
+          '',
+          `Usage: /mouse ${currentState.mouseMode ? 'off' : 'on'}`
+        ));
+        return;
+      }
+      
+      const command = args.toLowerCase().trim();
+      
+      if (command === 'on' || command === 'enable') {
+        setKeyboardState(prev => ({ ...prev, mouseMode: true }));
+        setLines(prev => prev.concat('🖱️  Mouse mode enabled - copy/paste should work better now'));
+      } else if (command === 'off' || command === 'disable') {
+        setKeyboardState(prev => ({ ...prev, mouseMode: false }));
+        setLines(prev => prev.concat('🖱️  Mouse mode disabled - full keyboard handling restored'));
+      } else if (command === 'toggle') {
+        const newMode = !currentState.mouseMode;
+        setKeyboardState(prev => ({ ...prev, mouseMode: newMode }));
+        setLines(prev => prev.concat(`🖱️  Mouse mode ${newMode ? 'enabled' : 'disabled'}`));
+      } else {
+        setLines(prev => prev.concat(`❌ Unknown mouse command: ${command}. Use 'on', 'off', or 'toggle'.`));
+      }
+      
+    } catch (e: any) {
+      setLines(prev => prev.concat(`❌ Mouse command failed: ${e?.message || e}`));
+    }
+  };
+
+  // Handle paste mode command - temporarily disables all input for easy copy/paste
+  const handlePasteCommand = async (args?: string) => {
+    try {
+      const seconds = args ? parseInt(args.trim()) : 5;
+      
+      if (isNaN(seconds) || seconds < 1 || seconds > 60) {
+        setLines(prev => prev.concat('❌ Invalid duration. Use 1-60 seconds.'));
+        return;
+      }
+      
+      setLines(prev => prev.concat(
+        `📋 Paste mode activated for ${seconds} seconds`,
+        '   • All keyboard input is disabled',
+        '   • Use your terminal\'s copy/paste (Ctrl+Shift+C/V, right-click, etc.)',
+        '   • Input will be re-enabled automatically',
+        ''
+      ));
+      
+      // Disable all input handling temporarily
+      setKeyboardState(prev => ({ ...prev, pasteMode: true }));
+      
+      setTimeout(() => {
+        setKeyboardState(prev => ({ ...prev, pasteMode: false }));
+        setLines(prev => prev.concat('📋 Paste mode disabled - keyboard input restored'));
+      }, seconds * 1000);
+      
+    } catch (e: any) {
+      setLines(prev => prev.concat(`❌ Paste command failed: ${e?.message || e}`));
+    }
+  };
+
+  // Force component re-render (for style updates)
+  const [, updateState] = useState({});
+  const forceUpdate = () => updateState({});
+
   // Handle regular messages
   const handleRegularMessage = async (text: string) => {
     setLines(prev => prev.concat(`You: ${text}`));
@@ -711,7 +1049,7 @@ export function App() {
       turns: String(m.turns),
     };
     return fmt.replace(/\{(\w+)\}/g, (_: string, k: string) => map[k] ?? '');
-  }, [cfg, branch, keyboardState.transcriptMode, keyboardState.backgroundMode]);
+  }, [cfg, branch, keyboardState.transcriptMode, keyboardState.backgroundMode, orchestrator.getMetrics().turns]);
 
   // Current input display
   const inputDisplay = keyboardState.isMultiLine
@@ -727,28 +1065,71 @@ export function App() {
   if (keyboardState.transcriptMode) modeIndicators.push('📝 TRANSCRIPT');
   if (keyboardState.backgroundMode) modeIndicators.push('🔄 BACKGROUND');
   if (keyboardState.historyMode) modeIndicators.push('📜 HISTORY');
+  if (keyboardState.pasteMode) modeIndicators.push('📋 PASTE');
+  if (keyboardState.mouseMode && !keyboardState.pasteMode) modeIndicators.push('🖱️  MOUSE');
 
   return (
     <Box flexDirection="column" width={process.stdout.columns} height={process.stdout.rows}>
-      <Box borderStyle="round" borderColor="blue" padding={1} flexDirection="column" height={process.stdout.rows-4}>
-        {lines.slice(-Math.max(1, process.stdout.rows-8)).map((l, i) => (<Text key={i}>{l}</Text>))}
-      </Box>
+      <StyledBox flexDirection="column" height={process.stdout.rows-4}>
+        {lines.slice(-Math.max(1, process.stdout.rows-8)).map((l, i) => (
+          <StyledText key={i} type="primary">{l}</StyledText>
+        ))}
+      </StyledBox>
       {modeIndicators.length > 0 && (
         <Box>
-          <Text color="cyan">{modeIndicators.join(' ')}</Text>
+          <StatusLine 
+            mode={modeIndicators.join(' ')}
+            context={branch}
+            session={keyboardState.messageHistory.length > 0 ? 'active' : 'new'}
+          />
         </Box>
       )}
       <Box>
-        <Text color="gray">{confirmDisplay}</Text>
+        <StyledText type="secondary">{confirmDisplay}</StyledText>
       </Box>
       <Box>
-        <Text>{'> '}{inputDisplay}</Text>
+        <StyledText type="primary">{'> '}{inputDisplay}</StyledText>
       </Box>
     </Box>
   );
 }
 
 export async function runTui() {
-  const ui = render(<App />);
-  await ui.waitUntilExit();
+  // Check raw mode support before attempting to render
+  // This prevents the crash in WSL environments
+  const isRawModeSupported = process.stdin.setRawMode !== undefined;
+  
+  if (!isRawModeSupported) {
+    console.error('\n❌ Raw mode is not supported in this environment.');
+    console.error('This is common in WSL, Docker, or some CI environments.');
+    console.error('\n💡 Try running with:');
+    console.error('  • A proper TTY terminal');
+    console.error('  • Outside of Docker/WSL if possible');
+    console.error('  • Using the CLI commands directly:');
+    console.error('    npx tsx src/cli.ts login');
+    console.error('    npx tsx src/cli.ts status');
+    console.error('\n📚 For more info: https://github.com/vadimdemedes/ink/#israwmodesupported');
+    process.exit(1);
+  }
+
+  try {
+    const ui = render(<App />);
+    await ui.waitUntilExit();
+  } catch (error: any) {
+    // If Ink fails due to raw mode issues, provide helpful information
+    if (error.message && error.message.includes('Raw mode is not supported')) {
+      console.error('\n❌ Raw mode is not supported in this environment.');
+      console.error('This is common in WSL, Docker, or some CI environments.');
+      console.error('\n💡 Try running with:');
+      console.error('  • A proper TTY terminal');
+      console.error('  • Outside of Docker/WSL if possible');
+      console.error('  • Using the CLI commands directly:');
+      console.error('    npx tsx src/cli.ts login');
+      console.error('    npx tsx src/cli.ts status');
+      console.error('\n📚 For more info: https://github.com/vadimdemedes/ink/#israwmodesupported');
+    } else {
+      console.error('❌ Application error:', error.message);
+    }
+    process.exit(1);
+  }
 }

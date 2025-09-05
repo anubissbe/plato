@@ -149,3 +149,83 @@ export async function getAuthInfo(): Promise<{ loggedIn: boolean; user?: { login
     return { loggedIn: true };
   }
 }
+
+export async function getAvailableModels(): Promise<string[]> {
+  try {
+    const cfg = await loadConfig();
+    const base = cfg.provider?.copilot?.base_url || 'https://api.githubcopilot.com';
+    
+    // Try multiple endpoints to get models
+    const endpoints = [
+      '/v1/models',
+      '/models', 
+      '/v1/chat/completions' // Some APIs expose models through a test call
+    ];
+    
+    for (const endpoint of endpoints) {
+      try {
+        const modelsUrl = new URL(endpoint, base).toString();
+        const response = await providerFetch(modelsUrl, { method: 'GET' });
+        
+        if (response.ok) {
+          const data = await response.json() as any;
+          
+          // Standard OpenAI-style models endpoint
+          if (data.data && Array.isArray(data.data)) {
+            const models = data.data.map((model: any) => model.id).filter(Boolean);
+            if (models.length > 0) {
+              console.error(`✓ Found ${models.length} models via ${endpoint}`);
+              return models.sort();
+            }
+          }
+          
+          // Some APIs return models differently
+          if (data.models && Array.isArray(data.models)) {
+            const models = data.models.filter(Boolean);
+            if (models.length > 0) {
+              console.error(`✓ Found ${models.length} models via ${endpoint}`);
+              return models.sort();
+            }
+          }
+        }
+      } catch (e) {
+        // Try next endpoint
+        continue;
+      }
+    }
+    
+    // If API discovery fails, return expanded fallback list including Claude 4.1 Sonnet
+    console.error('⚠️ Could not fetch models from API, using fallback list');
+    return [
+      // OpenAI Models
+      'gpt-4o',
+      'gpt-4o-mini',
+      'gpt-4-turbo',
+      'gpt-4',
+      'gpt-3.5-turbo',
+      // O-series models
+      'o3-mini',
+      'o1-preview',
+      'o1-mini',
+      // Claude Models (Anthropic)
+      'claude-3.5-sonnet',
+      'claude-3.5-haiku',
+      'claude-3-opus',
+      'claude-3-sonnet', 
+      'claude-3-haiku',
+      // Potential newer Claude models
+      'claude-4.1-sonnet',
+      'claude-4-sonnet'
+    ].sort();
+    
+  } catch (error) {
+    console.error('❌ Error fetching models:', error);
+    // Minimal fallback if everything fails
+    return [
+      'gpt-4o',
+      'gpt-4o-mini',
+      'claude-3.5-sonnet',
+      'claude-4.1-sonnet'
+    ];
+  }
+}

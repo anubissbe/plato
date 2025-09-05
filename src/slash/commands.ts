@@ -8,6 +8,8 @@ export const SLASH_COMMANDS: SlashCommand[] = [
   { name: '/agents', summary: 'Manage agent configurations' },
   { name: '/permissions', summary: 'Manage allow/deny tool permission rules' },
   { name: '/model', summary: 'List models and switch active model' },
+  { name: '/mouse', summary: 'Toggle mouse mode (enabled by default for copy/paste)' },
+  { name: '/paste', summary: 'Temporarily disable input for easy copy/paste (default 5s)' },
   { name: '/context', summary: 'Manage context and visualize token usage' },
   { name: '/add-dir', summary: 'Add a new working directory to context' },
   { name: '/bashes', summary: 'List and manage shell sessions' },
