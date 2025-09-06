@@ -30,12 +30,8 @@ describe('Custom Commands Integration Tests', () => {
         name: 'test-cmd',
         description: 'A test custom command',
         aliases: ['tc', 'testcmd'],
-        category: 'custom',
-        handler: 'echo "Custom command executed"',
-        validation: {
-          requiredArgs: 0,
-          maxArgs: 2
-        },
+        script: 'echo "Custom command executed"',
+        hasArguments: true,
         metadata: {
           version: '1.0.0',
           author: 'Test Author'
@@ -64,26 +60,23 @@ describe('Custom Commands Integration Tests', () => {
         {
           name: 'deploy',
           description: 'Deploy application to production',
-          category: 'deployment',
-          handler: 'npm run deploy',
-          validation: { requiredArgs: 0, maxArgs: 1 },
+          script: 'npm run deploy',
+          hasArguments: true,
           metadata: { version: '1.0.0', author: 'DevOps Team' }
         },
         {
           name: 'backup',
           description: 'Create database backup',
           aliases: ['bk'],
-          category: 'maintenance',
-          handler: 'pg_dump mydb > backup.sql',
-          validation: { requiredArgs: 0, maxArgs: 0 },
+          script: 'pg_dump mydb > backup.sql',
+          hasArguments: false,
           metadata: { version: '2.1.0', author: 'Database Admin' }
         },
         {
           name: 'analyze-logs',
           description: 'Analyze application logs for errors',
-          category: 'debugging',
-          handler: 'grep -i error logs/*.log',
-          validation: { requiredArgs: 0, maxArgs: 3 },
+          script: 'grep -i error logs/*.log',
+          hasArguments: true,
           metadata: { version: '1.2.0', author: 'Support Team' }
         }
       ];
@@ -117,7 +110,7 @@ describe('Custom Commands Integration Tests', () => {
       const invalidCommand = {
         name: 'invalid-cmd',
         // Missing description and handler
-        category: 'custom'
+        // category removed - not part of interface
       };
 
       const commandPath = '.plato/commands/invalid-cmd.json';
