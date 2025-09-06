@@ -6,6 +6,7 @@ import { orchestrator } from '../runtime/orchestrator.js';
 import { StyledBox, StyledText, StatusLine, WelcomeMessage, ErrorMessage } from '../styles/components.js';
 import { initializeStyleManager, getStyleManager } from '../styles/manager.js';
 import { getAvailableModels } from '../providers/copilot.js';
+import { handleContextCommand as processContextCommand } from './context-command.js';
 
 // Keyboard state management
 interface KeyboardState {
@@ -533,6 +534,11 @@ export function App() {
       return;
     }
 
+    if (command === '/context') {
+      await handleContextCommand(args);
+      return;
+    }
+
     // Default handling for unimplemented commands
     setLines(prev => prev.concat(`(command) ${text}`));
   };
@@ -986,6 +992,108 @@ export function App() {
       
     } catch (e: any) {
       setLines(prev => prev.concat(`❌ Paste command failed: ${e?.message || e}`));
+    }
+  };
+
+  // Handle context command
+  const handleContextCommand = async (args?: string) => {
+    try {
+      const result = await processContextCommand(args || '', {
+        workingDirectory: process.cwd(),
+        tokenBudget: 10000, // Default token budget
+        currentFiles: [], // Would come from current session context
+      });
+
+      if (result.success) {
+        switch (result.action) {
+          case 'show':
+            setLines(prev => prev.concat(
+              '📊 Context Overview',
+              `   Tokens: ${result.data.tokenUsage.toLocaleString()} / ${result.data.tokenBudget.toLocaleString()} (${Math.round((result.data.tokenUsage / result.data.tokenBudget) * 100)}%)`,
+              `   Files: ${result.data.fileCount}`,
+              `   Relevance: High: ${result.data.relevanceDistribution.high}, Medium: ${result.data.relevanceDistribution.medium}, Low: ${result.data.relevanceDistribution.low}`,
+              ''
+            ));
+            
+            if (result.data.budgetBreakdown) {
+              setLines(prev => prev.concat(
+                '💰 Budget Breakdown:',
+                `   Code: ${result.data.budgetBreakdown.code.toLocaleString()} tokens`,
+                `   Comments: ${result.data.budgetBreakdown.comments.toLocaleString()} tokens`,
+                `   Types: ${result.data.budgetBreakdown.types.toLocaleString()} tokens`,
+                `   Imports: ${result.data.budgetBreakdown.imports.toLocaleString()} tokens`,
+                ''
+              ));
+            }
+            break;
+
+          case 'suggest':
+            setLines(prev => prev.concat(
+              '💡 File Suggestions:',
+              ...result.data.suggestions.slice(0, 5).map((s: any) => 
+                `   ${s.score >= 80 ? '🔥' : s.score >= 60 ? '⭐' : '•'} ${s.path} (${s.score})`
+              ),
+              result.data.suggestions.length > 5 ? `   ... and ${result.data.suggestions.length - 5} more` : '',
+              ''
+            ));
+            break;
+
+          case 'add-related':
+            setLines(prev => prev.concat(
+              `📎 Added related files for: ${result.data.sourceFile}`,
+              ...result.data.addedFiles.slice(0, 3).map((f: string) => `   + ${f}`),
+              result.data.addedFiles.length > 3 ? `   + ${result.data.addedFiles.length - 3} more...` : '',
+              `   Total tokens: ${result.data.totalTokens.toLocaleString()}`,
+              ''
+            ));
+            break;
+
+          case 'optimize':
+            setLines(prev => prev.concat(
+              '⚡ Optimization Results:',
+              `   Token savings: ${result.data.tokensSaved.toLocaleString()}`,
+              `   New usage: ${result.data.newTokenUsage.toLocaleString()}`,
+              ...result.data.optimizations.slice(0, 3).map((opt: string) => `   • ${opt}`),
+              result.data.optimizations.length > 3 ? `   • ${result.data.optimizations.length - 3} more suggestions...` : '',
+              ''
+            ));
+            break;
+
+          case 'search':
+            setLines(prev => prev.concat(
+              `🔍 Search results for "${result.data.query}":`,
+              ...result.data.results.slice(0, 5).map((r: any) => 
+                `   ${r.type === 'file' ? '📄' : '🔗'} ${r.symbol} (${r.file})`
+              ),
+              result.data.results.length > 5 ? `   ... ${result.data.totalMatches - 5} more results` : '',
+              ''
+            ));
+            break;
+
+          case 'export':
+            setLines(prev => prev.concat(
+              `💾 Context exported to: ${result.data.path}`,
+              `   Files: ${result.data.fileCount}`,
+              ''
+            ));
+            break;
+
+          case 'import':
+            setLines(prev => prev.concat(
+              `📁 Context imported successfully`,
+              `   Files: ${result.data.importedFiles.length}`,
+              ''
+            ));
+            break;
+
+          default:
+            setLines(prev => prev.concat(`✅ Context command completed: ${result.action}`));
+        }
+      } else {
+        setLines(prev => prev.concat(`❌ Context command failed: ${result.error}`));
+      }
+    } catch (e: any) {
+      setLines(prev => prev.concat(`❌ Context command error: ${e?.message || e}`));
     }
   };
 
