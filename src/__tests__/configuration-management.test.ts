@@ -66,7 +66,7 @@ describe('Configuration Management', () => {
 
   describe('MouseSettingsManager', () => {
     it('should load default settings when no config exists', () => {
-      (existsSync as jest.Mock) as jest.Mock).mockReturnValue(false);
+      (existsSync as jest.Mock).mockReturnValue(false);
       
       const settings = settingsManager.getSettings();
       
@@ -84,8 +84,8 @@ describe('Configuration Management', () => {
         doubleClickSpeed: 300,
       };
       
-      (existsSync as jest.Mock) as jest.Mock).mockReturnValue(true);
-      (readFileSync as jest.Mock) as jest.Mock).mockReturnValue(JSON.stringify(customSettings));
+      (existsSync as jest.Mock).mockReturnValue(true);
+      (readFileSync as jest.Mock).mockReturnValue(JSON.stringify(customSettings));
       
       const settings = settingsManager.getSettings();
       
@@ -104,7 +104,7 @@ describe('Configuration Management', () => {
       
       expect(writeFileSync).toHaveBeenCalled();
       
-      const savedData = JSON.parse((writeFileSync as jest.Mock) as jest.Mock).mock.calls[0][1] as string);
+      const savedData = JSON.parse((writeFileSync as jest.Mock).mock.calls[0][1] as string);
       expect(savedData.enabled).toBe(false);
       expect(savedData.doubleClickSpeed).toBe(400);
     });
@@ -141,8 +141,8 @@ describe('Configuration Management', () => {
       
       preferencesManager.loadPreferences();
       
-      expect((mkdirSync).toHaveBeenCalledWith(TEST_CONFIG_DIR, { recursive: true });
-      expect((writeFileSync).toHaveBeenCalledWith(
+      expect(mkdirSync).toHaveBeenCalledWith(TEST_CONFIG_DIR, { recursive: true });
+      expect(writeFileSync).toHaveBeenCalledWith(
         TEST_PREFERENCES_FILE,
         JSON.stringify(DEFAULT_PREFERENCES, null, 2)
       );
@@ -183,7 +183,7 @@ describe('Configuration Management', () => {
       
       preferencesManager.savePreferences(newPreferences);
       
-      expect((writeFileSync).toHaveBeenCalledWith(
+      expect(writeFileSync).toHaveBeenCalledWith(
         TEST_PREFERENCES_FILE,
         JSON.stringify(newPreferences, null, 2)
       );
