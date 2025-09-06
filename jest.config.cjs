@@ -28,13 +28,16 @@ module.exports = {
   },
   testMatch: [
     '<rootDir>/src/**/__tests__/**/*.test.ts',
+    '<rootDir>/src/**/__tests__/**/*.test.tsx',
     '<rootDir>/src/**/*.test.ts',
+    '<rootDir>/src/**/*.test.tsx',
   ],
   collectCoverageFrom: [
     'src/**/*.{ts,tsx}',
     '!src/**/*.d.ts',
     '!src/**/__tests__/**',
     '!src/**/*.test.ts',
+    '!src/**/*.test.tsx',
     '!src/cli.ts',
   ],
   coverageDirectory: 'coverage',

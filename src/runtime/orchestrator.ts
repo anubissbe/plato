@@ -11,6 +11,22 @@ import { MemoryManager } from '../memory/manager.js';
 import type { MemoryEntry } from '../memory/types.js';
 import { SemanticAnalyzer } from '../context/semantic-analyzer.js';
 import { ContextPersistenceManager } from '../context/session-persistence.js';
+import { 
+  emitTurnStart, 
+  emitTurnEnd, 
+  emitStreamStart, 
+  emitStreamEnd,
+  emitTokenUpdate,
+  emitToolStart,
+  emitToolEnd,
+  emitPatchExtract,
+  emitPatchApplyStart,
+  emitPatchApplyEnd,
+  emitResponseTime,
+  emitMemoryUpdate,
+  emitError,
+  StreamProgressTracker
+} from './status-events.js';
 
 export type Msg = { role: 'system'|'user'|'assistant'|'tool', content: string };
 const history: Msg[] = [
@@ -112,6 +128,10 @@ export const orchestrator = {
   },
   async respondStream(input: string, onDelta: (text: string)=>void, onEvent?: (e: OrchestratorEvent)=>void): Promise<string> {
     await runHooks('pre-prompt');
+    
+    // Emit turn start event
+    emitTurnStart('user', input);
+    
     history.push({ role: 'user', content: input });
     
     // Create cancellation token for this stream
@@ -120,27 +140,57 @@ export const orchestrator = {
     const t0 = Date.now();
     const msgs = await prepareMessages(history);
     
+    // Create stream progress tracker
+    const streamTracker = new StreamProgressTracker();
+    
     try {
+      // Emit stream start event
+      emitStreamStart();
+      streamTracker.reset();
+      
       const { content, usage } = await chatStream(msgs, {}, (d) => { 
         if (streamCancellation?.signal.aborted) return;
-        onDelta(d); 
+        onDelta(d);
+        streamTracker.addChunk(d);
         saveSessionDebounced().catch(()=>{}); 
       });
       
+      // Emit stream end event
+      streamTracker.end();
+      
       const dt = Date.now() - t0;
+      
+      // Emit response time
+      emitResponseTime(dt);
+      
       metrics.durationMs += dt;
       metrics.turns += 1;
       
       if (usage) {
-        metrics.inputTokens += usage.prompt_tokens ?? usage.input_tokens ?? 0;
-        metrics.outputTokens += usage.completion_tokens ?? usage.output_tokens ?? 0;
+        const inputTokens = usage.prompt_tokens ?? usage.input_tokens ?? 0;
+        const outputTokens = usage.completion_tokens ?? usage.output_tokens ?? 0;
+        metrics.inputTokens += inputTokens;
+        metrics.outputTokens += outputTokens;
+        
+        // Emit token update
+        emitTokenUpdate(inputTokens, outputTokens);
       }
+      
+      // Emit memory update periodically
+      emitMemoryUpdate();
       
       const assistant = content || '(no content)';
       history.push({ role: 'assistant', content: assistant });
       
+      // Emit turn end event
+      emitTurnEnd('assistant', assistant);
+      
       await runHooks('post-response');
       pendingPatch = extractPatch(assistant) || null;
+      
+      // Emit patch extract event
+      emitPatchExtract(!!pendingPatch);
+      
       await maybeAutoApply(pendingPatch, onEvent);
       await maybeBridgeTool(assistant, onEvent);
       await saveSessionDefault();
@@ -154,8 +204,10 @@ export const orchestrator = {
     } catch (e: any) {
       if (e.name === 'AbortError' || streamCancellation?.signal.aborted) {
         onEvent?.({ type: 'info', message: 'Operation cancelled' });
+        streamTracker.end();
         return '(cancelled)';
       }
+      emitError(e.message, e.code);
       throw e;
     } finally {
       streamCancellation = null;
@@ -853,14 +905,26 @@ async function maybeBridgeTool(content: string, onEvent?: (e: OrchestratorEvent)
   const { server, name, input = {} } = toolCall.tool_call;
   const decision = await checkPermission({ tool: 'mcp', command: `${server}:${name}` });
   if (decision !== 'allow') { onEvent?.({ type: 'info', message: `Tool call requires permission: ${server}:${name} => ${decision}` }); return; }
+  
+  // Emit tool start event
+  emitToolStart(name, server, input);
+  
   onEvent?.({ type: 'tool-start', message: `Running ${name}...` });
   try {
     const result = await callTool(server, name, input);
     history.push({ role: 'tool', content: JSON.stringify(result) });
+    
+    // Emit tool success event
+    emitToolEnd(name, true);
+    
     onEvent?.({ type: 'tool-end', message: 'Tool completed' });
   } catch (e: any) {
     const error = `Tool failed: ${e?.message || e}`;
     history.push({ role: 'tool', content: error });
+    
+    // Emit tool failure event
+    emitToolEnd(name, false, e?.message || String(e));
+    
     onEvent?.({ type: 'tool-end', message: error });
   }
 }
@@ -1042,11 +1106,19 @@ async function maybeAutoApply(patch: string | null, onEvent?: (e: OrchestratorEv
   if (!dry.ok) { onEvent?.({ type: 'info', message: `auto-apply check failed: ${dry.conflicts.slice(0,2).join(' | ')}` }); return; }
   // Announce actions (Claude-style) and apply
   const details = parseDiffDetails(patch);
+  
+  // Emit patch apply start event
+  emitPatchApplyStart(details.length);
+  
   for (const d of details) {
     onEvent?.({ type: 'info', message: `● Write(${d.file})` });
   }
   try {
     await applyPatch(patch);
+    
+    // Emit patch apply success event
+    emitPatchApplyEnd(true);
+    
     if (details.length === 1 && details[0].newFile) {
       onEvent?.({ type: 'info', message: `● I'll create a file called ${details[0].file}.` });
     }
@@ -1060,6 +1132,9 @@ async function maybeAutoApply(patch: string | null, onEvent?: (e: OrchestratorEv
 ● Done! ${details.length===1 ? `Created ${details[0].file}` : 'Applied changes.'}` });
     pendingPatch = null;
   } catch (e: any) {
+    // Emit patch apply failure event
+    emitPatchApplyEnd(false, e?.message || String(e));
+    
     onEvent?.({ type: 'info', message: `auto-apply error: ${e?.message || e}` });
   }
 }

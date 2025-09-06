@@ -39,6 +39,21 @@ export type Config = {
     active?: string;
     custom?: OutputStyle[];
   };
+  status?: {
+    enabled?: boolean;
+    position?: 'top' | 'bottom';
+    showStatusLine?: boolean;
+    showProgressBar?: boolean;
+    compactMode?: boolean;
+    theme?: 'light' | 'dark';
+    updateInterval?: number;
+    visibleMetrics?: string[];
+    progressBarWidth?: number;
+    showStreamingProgress?: boolean;
+    showToolCallProgress?: boolean;
+    pulseOnUpdate?: boolean;
+    showSpinner?: boolean;
+  };
 };
 
 const HOME = os.homedir();
@@ -136,6 +151,7 @@ function mergeConfig(a: Config, b: Config): Config {
     model: { ...(a.model||{}), ...(b.model||{}) },
     statusline: { ...(a.statusline||{}), ...(b.statusline||{}) },
     privacy: { ...(a.privacy||{}), ...(b.privacy||{}) },
+    status: { ...(a.status||{}), ...(b.status||{}) },
   };
 }
 
