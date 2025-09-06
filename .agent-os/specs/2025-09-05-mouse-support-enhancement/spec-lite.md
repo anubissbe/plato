@@ -1,8 +1,8 @@
 # Mouse Support Enhancement - Lite Summary
 
-Enhance Plato's current basic mouse support with interactive features including click handling, scrolling navigation, and text selection to provide a more intuitive and user-friendly terminal experience.
+Implement comprehensive mouse support in Plato's terminal UI to achieve pixel-perfect parity with Claude Code, including click interactions for buttons and links, precise text selection with copy/paste functionality, and smooth scrolling capabilities for enhanced user experience.
 
 ## Key Points
-- Add interactive click handling for UI elements and commands
-- Implement mouse wheel scrolling for conversation history navigation
-- Enable text selection and copy functionality with mouse
+- Enable full mouse interaction parity with Claude Code's terminal interface
+- Implement precise text selection and clipboard integration for seamless copy/paste workflows
+- Add smooth scrolling and click-to-interact functionality for buttons, links, and UI elements
