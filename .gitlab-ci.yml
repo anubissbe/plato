@@ -21,12 +21,13 @@ default:
 
 # Variables
 variables:
-  NODE_ENV: "production"
+  NODE_ENV: "development"  # Need dev dependencies for build process
 
 # Build stage
 build:
   stage: build
   script:
+    - npx tsc --version  # Verify TypeScript is available
     - npm run build
     - echo "Build completed successfully"
   artifacts:
