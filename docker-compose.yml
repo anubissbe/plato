@@ -1,0 +1,71 @@
+version: '3.8'
+
+services:
+  plato:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    image: plato:latest
+    container_name: plato
+    environment:
+      - NODE_ENV=development
+      - LOG_LEVEL=debug
+      - PLATO_CONFIG_DIR=/app/.plato
+      - PLATO_MEMORY_DIR=/app/.plato/memory
+    volumes:
+      # Mount source code for development
+      - ./src:/app/src:ro
+      - ./dist:/app/dist
+      - ./scripts:/app/scripts:ro
+      - ./docs:/app/docs:ro
+      
+      # Persistent data
+      - plato_data:/app/.plato
+      
+      # Mount config from host (optional)
+      # - ~/.config/plato:/app/.config/plato
+    ports:
+      - "3000:3000"  # HTTP proxy port
+      - "11434:11434"  # OpenAI-compatible proxy
+    networks:
+      - plato_network
+    restart: unless-stopped
+    stdin_open: true
+    tty: true
+    command: ["npm", "run", "dev"]
+
+  # Optional: Redis for caching
+  redis:
+    image: redis:7-alpine
+    container_name: plato_redis
+    volumes:
+      - redis_data:/data
+    networks:
+      - plato_network
+    restart: unless-stopped
+
+  # Optional: PostgreSQL for persistence
+  postgres:
+    image: postgres:15-alpine
+    container_name: plato_postgres
+    environment:
+      - POSTGRES_DB=plato
+      - POSTGRES_USER=plato
+      - POSTGRES_PASSWORD=changeme
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+    networks:
+      - plato_network
+    restart: unless-stopped
+
+volumes:
+  plato_data:
+    driver: local
+  redis_data:
+    driver: local
+  postgres_data:
+    driver: local
+
+networks:
+  plato_network:
+    driver: bridge

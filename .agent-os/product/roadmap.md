@@ -53,8 +53,8 @@ The following features have been implemented to achieve initial Claude Code pari
 
 ### Features
 
-- [ ] **Advanced Context Management** - Semantic indexing and intelligent file selection `XL`
-- [ ] **Enhanced TUI Experience** - Better layouts, status indicators, progress feedback `M`
+- [x] **Advanced Context Management** - Semantic indexing and intelligent file selection `XL` ✅ Completed (2025-09-05)
+- [x] **Enhanced TUI Experience** - Better layouts, status indicators, progress feedback `M` ✅ Completed (2025-09-06)
 - [x] **Comprehensive Test Coverage** - Unit and integration tests for all components `L` ✅ Completed (Task 4: 273/294 tests passing)
 - [ ] **Advanced Permissions System** - Fine-grained controls and safety features `L`
 - [ ] **Cost Tracking & Analytics** - Token usage monitoring and optimization hints `M`
