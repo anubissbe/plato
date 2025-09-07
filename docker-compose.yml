@@ -46,7 +46,7 @@ services:
 
   # Optional: PostgreSQL for persistence
   postgres:
-    image: postgres:15-alpine
+    image: postgres:17-alpine
     container_name: plato_postgres
     environment:
       - POSTGRES_DB=plato
