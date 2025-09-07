@@ -1,0 +1,202 @@
+# GitLab CI/CD Pipeline Configuration for Plato
+
+# Define stages
+stages:
+  - build
+  - test
+  - quality
+  - deploy
+
+# Cache node_modules between jobs
+cache:
+  paths:
+    - node_modules/
+    - .npm/
+
+# Default settings for all jobs
+default:
+  image: node:20-alpine
+  before_script:
+    - npm ci --cache .npm --prefer-offline
+
+# Variables
+variables:
+  NODE_ENV: "production"
+  AUTO_DEVOPS_ENABLED: "true"
+
+# Build stage
+build:
+  stage: build
+  script:
+    - npm run build
+    - echo "Build completed successfully"
+  artifacts:
+    paths:
+      - dist/
+    expire_in: 1 week
+  only:
+    - branches
+    - merge_requests
+
+# Test stage
+test:unit:
+  stage: test
+  script:
+    - npm test -- --coverage --maxWorkers=2
+    - echo "Unit tests completed"
+  coverage: '/All files[^|]*\|[^|]*\s+([\d\.]+)/'
+  artifacts:
+    reports:
+      coverage_report:
+        coverage_format: cobertura
+        path: coverage/cobertura-coverage.xml
+    paths:
+      - coverage/
+    expire_in: 1 week
+  only:
+    - branches
+    - merge_requests
+
+# TypeScript type checking
+test:typecheck:
+  stage: test
+  script:
+    - npm run typecheck
+    - echo "Type checking completed"
+  only:
+    - branches
+    - merge_requests
+
+# Linting
+quality:lint:
+  stage: quality
+  script:
+    - npm run lint
+    - echo "Linting completed"
+  allow_failure: true
+  only:
+    - branches
+    - merge_requests
+
+# Security scanning
+security:dependencies:
+  stage: quality
+  script:
+    - npm audit --audit-level=moderate
+    - echo "Security audit completed"
+  allow_failure: true
+  only:
+    - branches
+    - merge_requests
+
+# Performance testing
+quality:performance:
+  stage: quality
+  script:
+    - npm run build
+    - echo "Checking bundle size..."
+    - du -sh dist/
+    - echo "Performance checks completed"
+  only:
+    - branches
+    - merge_requests
+
+# Deploy to staging (manual trigger)
+deploy:staging:
+  stage: deploy
+  script:
+    - echo "Deploying to staging environment..."
+    - npm run build
+    - echo "Deployment to staging completed"
+  environment:
+    name: staging
+    url: https://staging.plato.example.com
+  when: manual
+  only:
+    - main
+    - develop
+
+# Deploy to production (manual trigger, main branch only)
+deploy:production:
+  stage: deploy
+  script:
+    - echo "Deploying to production environment..."
+    - npm run build
+    - echo "Deployment to production completed"
+  environment:
+    name: production
+    url: https://plato.example.com
+  when: manual
+  only:
+    - main
+
+# Auto DevOps compatibility
+include:
+  - template: Auto-DevOps.gitlab-ci.yml
+
+# Container scanning (if Docker is used)
+container_scanning:
+  stage: quality
+  variables:
+    GIT_STRATEGY: fetch
+  allow_failure: true
+  rules:
+    - if: '$CI_COMMIT_BRANCH == "main"'
+      when: always
+    - when: manual
+
+# SAST (Static Application Security Testing)
+sast:
+  stage: quality
+  allow_failure: true
+  rules:
+    - if: '$CI_COMMIT_BRANCH == "main"'
+      when: always
+    - when: manual
+
+# Code quality analysis
+code_quality:
+  stage: quality
+  allow_failure: true
+  rules:
+    - if: '$CI_COMMIT_BRANCH == "main"'
+      when: always
+    - when: manual
+
+# Kubernetes deployment configuration (if cluster is connected)
+.auto-deploy:
+  image: registry.gitlab.com/gitlab-org/cluster-integration/auto-deploy-image:latest
+  dependencies: []
+
+# Review app deployment
+review:
+  extends: .auto-deploy
+  stage: deploy
+  script:
+    - auto-deploy check_kube_context
+    - auto-deploy download_chart
+    - auto-deploy deploy
+  environment:
+    name: review/$CI_COMMIT_REF_NAME
+    url: https://$CI_PROJECT_ID-$CI_ENVIRONMENT_SLUG.$KUBE_INGRESS_BASE_DOMAIN
+    on_stop: stop_review
+  rules:
+    - if: '$CI_KUBERNETES_ACTIVE == "true" && $CI_COMMIT_BRANCH != "main"'
+      when: manual
+  allow_failure: true
+
+stop_review:
+  extends: .auto-deploy
+  stage: deploy
+  script:
+    - auto-deploy check_kube_context
+    - auto-deploy destroy
+  environment:
+    name: review/$CI_COMMIT_REF_NAME
+    action: stop
+  dependencies: []
+  when: manual
+  allow_failure: true
+  rules:
+    - if: '$CI_KUBERNETES_ACTIVE == "true" && $CI_COMMIT_BRANCH != "main"'
+      when: manual

@@ -7,7 +7,7 @@ module.exports = {
     '^(\\.{1,2}/.*)\\.js$': '$1',
   },
   transformIgnorePatterns: [
-    'node_modules/(?!(execa|@sindresorhus/merge-streams|cross-spawn|figures|get-stream|human-signals|is-plain-obj|is-stream|npm-run-path|pretty-ms|signal-exit|strip-final-newline|yoctocolors)/)',
+    'node_modules/(?!(execa|@sindresorhus/merge-streams|cross-spawn|figures|get-stream|human-signals|is-plain-obj|is-stream|npm-run-path|pretty-ms|signal-exit|strip-final-newline|yoctocolors|ink-testing-library)/)',
   ],
   transform: {
     '^.+\\.tsx?$': [
@@ -22,19 +22,23 @@ module.exports = {
           allowImportingTsExtensions: false,
           esModuleInterop: true,
           allowSyntheticDefaultImports: true,
+          jsx: 'react-jsx',
         },
       },
     ],
   },
   testMatch: [
     '<rootDir>/src/**/__tests__/**/*.test.ts',
+    '<rootDir>/src/**/__tests__/**/*.test.tsx',
     '<rootDir>/src/**/*.test.ts',
+    '<rootDir>/src/**/*.test.tsx',
   ],
   collectCoverageFrom: [
     'src/**/*.{ts,tsx}',
     '!src/**/*.d.ts',
     '!src/**/__tests__/**',
     '!src/**/*.test.ts',
+    '!src/**/*.test.tsx',
     '!src/cli.ts',
   ],
   coverageDirectory: 'coverage',

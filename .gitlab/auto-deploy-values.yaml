@@ -1,0 +1,155 @@
+# Auto DevOps Helm Chart Values
+# This file configures the deployment settings for GitLab Auto DevOps
+
+# Application configuration
+image:
+  repository: registry.git.euraika.net/bert/plato
+  tag: latest
+  pullPolicy: Always
+
+# Service configuration
+service:
+  enabled: true
+  type: ClusterIP
+  port: 3000
+  targetPort: 3000
+  annotations: {}
+
+# Ingress configuration
+ingress:
+  enabled: true
+  annotations:
+    kubernetes.io/ingress.class: nginx
+    cert-manager.io/cluster-issuer: letsencrypt-prod
+    nginx.ingress.kubernetes.io/force-ssl-redirect: "true"
+  hosts:
+    - host: plato.k8s.euraika.net
+      paths:
+        - path: /
+          pathType: Prefix
+  tls:
+    - secretName: plato-tls
+      hosts:
+        - plato.k8s.euraika.net
+
+# Resource limits
+resources:
+  limits:
+    cpu: 500m
+    memory: 512Mi
+  requests:
+    cpu: 100m
+    memory: 128Mi
+
+# Horizontal Pod Autoscaler
+autoscaling:
+  enabled: true
+  minReplicas: 1
+  maxReplicas: 3
+  targetCPUUtilizationPercentage: 80
+  targetMemoryUtilizationPercentage: 80
+
+# Health checks
+livenessProbe:
+  httpGet:
+    path: /health
+    port: 3000
+  initialDelaySeconds: 30
+  periodSeconds: 10
+
+readinessProbe:
+  httpGet:
+    path: /ready
+    port: 3000
+  initialDelaySeconds: 5
+  periodSeconds: 5
+
+# Environment variables
+env:
+  - name: NODE_ENV
+    value: production
+  - name: PORT
+    value: "3000"
+  - name: LOG_LEVEL
+    value: info
+
+# Secrets (referenced from GitLab CI/CD variables)
+secrets:
+  - name: GITHUB_TOKEN
+    valueFrom:
+      secretKeyRef:
+        name: plato-secrets
+        key: github-token
+  - name: COPILOT_TOKEN
+    valueFrom:
+      secretKeyRef:
+        name: plato-secrets
+        key: copilot-token
+
+# Persistent storage
+persistence:
+  enabled: true
+  size: 1Gi
+  storageClass: standard
+  mountPath: /app/.plato
+  accessMode: ReadWriteOnce
+
+# Network policies
+networkPolicy:
+  enabled: true
+  ingress:
+    - from:
+      - namespaceSelector:
+          matchLabels:
+            name: ingress-nginx
+  egress:
+    - to:
+      - ipBlock:
+          cidr: 0.0.0.0/0
+          except:
+            - 169.254.169.254/32  # Block metadata service
+
+# Pod Security Policy
+podSecurityContext:
+  runAsNonRoot: true
+  runAsUser: 1000
+  fsGroup: 1000
+
+securityContext:
+  allowPrivilegeEscalation: false
+  readOnlyRootFilesystem: true
+  capabilities:
+    drop:
+      - ALL
+
+# Rollout strategy
+strategy:
+  type: RollingUpdate
+  rollingUpdate:
+    maxSurge: 1
+    maxUnavailable: 0
+
+# Pod disruption budget
+podDisruptionBudget:
+  enabled: true
+  minAvailable: 1
+
+# Monitoring
+monitoring:
+  enabled: true
+  serviceMonitor:
+    enabled: true
+    interval: 30s
+    path: /metrics
+
+# Database (if needed in future)
+postgresql:
+  enabled: false
+  
+redis:
+  enabled: false
+
+# Review apps configuration
+reviewApps:
+  enabled: true
+  lifecycle: 7d  # Auto-delete after 7 days
