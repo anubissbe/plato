@@ -1,11 +1,11 @@
 # Plato
 
-[![CI Tests](https://github.com/anubissbe/plato/actions/workflows/test.yml/badge.svg)](https://github.com/anubissbe/plato/actions/workflows/test.yml)
-[![codecov](https://codecov.io/gh/anubissbe/plato/branch/main/graph/badge.svg)](https://codecov.io/gh/anubissbe/plato)
+[![Pipeline Status](https://git.euraika.net/Bert/plato/badges/main/pipeline.svg)](https://git.euraika.net/Bert/plato/-/pipelines)
+[![Coverage Report](https://git.euraika.net/Bert/plato/badges/main/coverage.svg)](https://git.euraika.net/Bert/plato/-/commits/main)
 [![Coverage Status](https://img.shields.io/badge/coverage-93%25-brightgreen.svg)](coverage/)
 [![Version](https://img.shields.io/badge/version-1.0.0-blue.svg)](CHANGELOG.md)
-[![Open Issues](https://img.shields.io/github/issues/anubissbe/plato)](https://github.com/anubissbe/plato/issues)
-[![Last Commit](https://img.shields.io/github/last-commit/anubissbe/plato)](https://github.com/anubissbe/plato/commits/main)
+[![License](https://img.shields.io/badge/license-Proprietary-red.svg)](LICENSE)
+[![Last Commit](https://git.euraika.net/Bert/plato/badges/main/last_commit.svg)](https://git.euraika.net/Bert/plato/-/commits/main)
 
 Status: v1 (Claude Code parity, Copilot-backed)
 
