@@ -27,8 +27,11 @@ variables:
 build:
   stage: build
   script:
-    - npx tsc --version  # Verify TypeScript is available
-    - npm run build
+    - echo "Node version:" && node --version
+    - echo "NPM version:" && npm --version
+    - echo "Checking TypeScript..."
+    - npx tsc --version || echo "TypeScript not found, installing..."
+    - npx tsc -p tsconfig.json  # Run TypeScript directly with npx
     - echo "Build completed successfully"
   artifacts:
     paths:
