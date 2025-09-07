@@ -2,7 +2,6 @@ import fs from 'fs/promises';
 import os from 'os';
 import path from 'path';
 import YAML from 'yaml';
-import { loadConfig, saveConfig, setConfigValue, ensureConfigLoaded } from '../../config';
 import type { Config } from '../../config';
 
 jest.mock('fs/promises');
@@ -12,13 +11,25 @@ describe('config', () => {
   const mockHomeDir = '/home/test';
   const globalConfigPath = path.join(mockHomeDir, '.config', 'plato', 'config.yaml');
   const projectConfigPath = path.join(process.cwd(), '.plato', 'config.yaml');
+  
+  let loadConfig: any;
+  let saveConfig: any;
+  let setConfigValue: any;
+  let ensureConfigLoaded: any;
 
-  beforeEach(() => {
+  beforeEach(async () => {
     jest.clearAllMocks();
     jest.spyOn(os, 'homedir').mockReturnValue(mockHomeDir);
     
     // Reset module state between tests
     jest.resetModules();
+    
+    // Re-import config module after resetting
+    const configModule = await import('../../config');
+    loadConfig = configModule.loadConfig;
+    saveConfig = configModule.saveConfig;
+    setConfigValue = configModule.setConfigValue;
+    ensureConfigLoaded = configModule.ensureConfigLoaded;
   });
 
   afterEach(() => {
@@ -45,7 +56,6 @@ describe('config', () => {
         return {};
       });
 
-      const { loadConfig } = await import('../../config');
       const config = await loadConfig();
 
       expect(config.model?.active).toBe('gpt-3.5-turbo');

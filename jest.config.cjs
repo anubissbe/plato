@@ -2,23 +2,26 @@
 module.exports = {
   preset: 'ts-jest',
   testEnvironment: 'node',
-  extensionsToTreatAsEsm: ['.ts'],
+  extensionsToTreatAsEsm: ['.ts', '.tsx'],
   moduleNameMapper: {
     '^(\\.{1,2}/.*)\\.js$': '$1',
+    // Mock execa and other ESM modules
+    '^execa$': '<rootDir>/src/__mocks__/execa.ts',
+    '^fs/promises$': '<rootDir>/src/__mocks__/fs/promises.ts',
   },
   transformIgnorePatterns: [
-    'node_modules/(?!(execa|@sindresorhus/merge-streams|cross-spawn|figures|get-stream|human-signals|is-plain-obj|is-stream|npm-run-path|pretty-ms|signal-exit|strip-final-newline|yoctocolors|ink-testing-library)/)',
+    'node_modules/(?!(ink-testing-library)/)',
   ],
   transform: {
     '^.+\\.tsx?$': [
       'ts-jest',
       {
-        useESM: true,
+        useESM: false,
         tsconfig: {
-          module: 'esnext',
+          module: 'commonjs',
           target: 'es2022',
           lib: ['es2022'],
-          moduleResolution: 'bundler',
+          moduleResolution: 'node',
           allowImportingTsExtensions: false,
           esModuleInterop: true,
           allowSyntheticDefaultImports: true,
