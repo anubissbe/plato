@@ -710,7 +710,7 @@ export const orchestrator = {
       } else {
         console.log(json);
       }
-    } catch (error) {
+    } catch (error: any) {
       throw new Error(`Failed to export context configuration: ${error?.message || error}`);
     }
   },
@@ -758,7 +758,7 @@ export const orchestrator = {
                  `exported at ${exportData.exportedAt}]`
       });
       
-    } catch (error) {
+    } catch (error: any) {
       throw new Error(`Failed to import context configuration: ${error?.message || error}`);
     }
   },
@@ -812,7 +812,7 @@ export const orchestrator = {
         content: `[Context rolled back to snapshot from ${snapshot.timestamp}]`
       });
       
-    } catch (error) {
+    } catch (error: any) {
       throw new Error(`Failed to rollback context: ${error?.message || error}`);
     }
   }

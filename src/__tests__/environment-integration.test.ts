@@ -293,7 +293,7 @@ describe('Environment Integration Tests', () => {
       const capabilities = await platformDetector.detectCapabilities();
       
       expect(capabilities.environment.isContainer).toBe(true);
-      expect(capabilities.mouse.supportLevel).toBeLessThanOrEqual('partial');
+      expect(['none', 'minimal', 'partial']).toContain(capabilities.mouse.supportLevel);
     });
 
     test('should apply container-specific limitations', async () => {
