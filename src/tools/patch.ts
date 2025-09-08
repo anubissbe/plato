@@ -90,15 +90,42 @@ async function ensureGitRepo() {
 
 function sanitizeDiff(input: string): string {
   let s = input || '';
+  
+  // Security: Remove potential command injection
+  s = s.replace(/\$\(.+?\)/g, '');
+  s = s.replace(/`.+?`/g, ''); // Remove backtick command substitution
+  
+  // Strip null bytes and control characters
+  s = s.replace(/\0/g, '');
+  s = s.replace(/[\x00-\x08\x0B\x0C\x0E-\x1F\x7F]/g, ''); // Control chars except \t \n \r
+  
   // Remove explicit patch markers if present (with optional trailing asterisks)
   s = s.replace(/^\*\*\*\s+Begin Patch.*$/gmi, '');
   s = s.replace(/^\*\*\*\s+End Patch.*$/gmi, '');
+  
   // Remove fenced code block markers like ``` or ```diff
   s = s.replace(/^```.*$/gm, '');
+  
   // Normalize line endings and trim
   s = s.replace(/\r\n?/g, '\n').trim();
+  
+  // Security: Validate patch headers don't contain path traversal
+  const lines = s.split('\n');
+  for (const line of lines) {
+    if (line.startsWith('+++') || line.startsWith('---')) {
+      const path = line.slice(4).trim().split(/\s+/)[0];
+      if (path.includes('../') || path.includes('..\\') || path.startsWith('/')) {
+        throw new Error('Patch contains path traversal attempt');
+      }
+    }
+  }
+  
+  // Ensure valid UTF-8 by encoding and decoding
+  s = Buffer.from(s, 'utf8').toString('utf8');
+  
   // Ensure traditional unified diff headers use a/ and b/ prefixes for git apply friendliness
   s = s.replace(/^---\s+(?!a\/)(?!\/dev\/null)([^\n]+)$/gm, '--- a/$1');
   s = s.replace(/^\+\+\+\s+(?!b\/)(?!\/dev\/null)([^\n]+)$/gm, '+++ b/$1');
+  
   return s;
 }

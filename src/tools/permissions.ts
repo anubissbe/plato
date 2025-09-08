@@ -21,7 +21,9 @@ export async function loadPermissions(): Promise<Permissions> {
       const txt = await fs.readFile(f, 'utf8');
       const y = YAML.parse(txt) || {};
       merged = { ...merged, ...(y || {}) };
-    } catch {}
+    } catch {
+      // Silent - config file optional
+    }
   }
   return (merged.permissions || {}) as Permissions;
 }

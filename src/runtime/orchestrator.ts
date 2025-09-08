@@ -12,6 +12,7 @@ import type { MemoryEntry } from '../memory/types.js';
 import { SemanticAnalyzer } from '../context/semantic-analyzer.js';
 import { ContextPersistenceManager } from '../context/session-persistence.js';
 import { createDefaultAnalyticsService, AnalyticsService } from '../services/analytics.js';
+import { getSelected } from '../context/context.js';
 import { 
   emitTurnStart, 
   emitTurnEnd, 
@@ -129,6 +130,7 @@ class RealTimeCostTracker {
       const service = getAnalyticsServiceInstance();
       return service.calculateCost('copilot', 'gpt-3.5-turbo', this.inputTokens, this.estimatedOutputTokens);
     } catch {
+      // Silent - analytics service optional
       return 0;
     }
   }
@@ -755,6 +757,7 @@ export const orchestrator = {
         .slice(-100) // Return last 100 memories
         .map(mem => `[${mem.timestamp}] ${mem.type}: ${mem.content}`);
     } catch {
+      // Silent - memory service optional
       return [];
     }
   },
@@ -763,7 +766,7 @@ export const orchestrator = {
       const manager = await ensureMemoryManager();
       await manager.clearAllMemories();
     } catch {
-      // Ignore errors
+      // Silent - memory cleanup optional
     }
   },
   async addMemory(type: MemoryEntry['type'], content: string, costMetadata?: MemoryEntry['costMetadata']): Promise<string> {
@@ -792,6 +795,7 @@ export const orchestrator = {
       const manager = await ensureMemoryManager();
       return await manager.getProjectContext();
     } catch {
+      // Silent - project context optional
       return '';
     }
   },
@@ -800,7 +804,7 @@ export const orchestrator = {
       const manager = await ensureMemoryManager();
       await manager.updateProjectContext(content);
     } catch {
-      // Ignore errors
+      // Silent - project context update optional
     }
   },
   async saveSession(): Promise<void> {
@@ -1597,8 +1601,24 @@ async function saveSessionDefault() {
   const file = '.plato/session.json';
   try {
     await fs.mkdir('.plato', { recursive: true });
-    const data = { history, metrics };
-    await fs.writeFile(file, JSON.stringify(data, null, 2), 'utf8');
+    
+    // Enhanced session data structure
+    const session = {
+      version: '1.0',
+      timestamp: Date.now(),
+      messages: history.slice(-100), // Last 100 messages
+      context: await getSelected().catch(() => ({})), // Safe context fetching
+      config: await loadConfig(),
+      metrics
+    };
+    
+    const json = JSON.stringify(session);
+    if (json.length > 10 * 1024 * 1024) { // 10MB limit
+      // Rotate: keep last 50 messages
+      session.messages = history.slice(-50);
+    }
+    
+    await fs.writeFile(file, JSON.stringify(session), 'utf8');
     
     // Also save context state through persistence manager
     await saveContextState();
