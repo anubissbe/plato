@@ -38,6 +38,16 @@ export interface StatusMetrics {
   
   // Progress indicators
   indeterminateProgress: boolean;
+  
+  // Cost analytics metrics
+  currentCost: number;
+  sessionCost: number;
+  todayCost: number;
+  costPerToken: number;
+  projectedCost?: number;
+  costThreshold?: number;
+  model?: string;
+  provider?: string;
 }
 
 export interface ToolCallRecord {
@@ -121,7 +131,15 @@ export class StatusManager {
       activeToolCall: null,
       toolCallHistory: [],
       lastError: null,
-      indeterminateProgress: false
+      indeterminateProgress: false,
+      currentCost: 0,
+      sessionCost: 0,
+      todayCost: 0,
+      costPerToken: 0,
+      projectedCost: 0,
+      costThreshold: undefined,
+      model: undefined,
+      provider: undefined
     };
   }
 
@@ -322,6 +340,41 @@ export class StatusManager {
   public incrementTurn(): void {
     this.updateMetrics({
       sessionTurns: this.metrics.sessionTurns + 1
+    });
+  }
+
+  // Cost tracking
+  public updateCostMetrics(costData: {
+    currentCost?: number;
+    sessionCost?: number;
+    todayCost?: number;
+    costPerToken?: number;
+    projectedCost?: number;
+    costThreshold?: number;
+    model?: string;
+    provider?: string;
+  }): void {
+    if (!this.config.collectMetrics) return;
+    
+    this.updateMetrics({
+      currentCost: costData.currentCost ?? this.metrics.currentCost,
+      sessionCost: costData.sessionCost ?? this.metrics.sessionCost,
+      todayCost: costData.todayCost ?? this.metrics.todayCost,
+      costPerToken: costData.costPerToken ?? this.metrics.costPerToken,
+      projectedCost: costData.projectedCost ?? this.metrics.projectedCost,
+      costThreshold: costData.costThreshold ?? this.metrics.costThreshold,
+      model: costData.model ?? this.metrics.model,
+      provider: costData.provider ?? this.metrics.provider
+    });
+  }
+
+  public incrementCost(amount: number): void {
+    if (!this.config.collectMetrics) return;
+    
+    this.updateMetrics({
+      currentCost: this.metrics.currentCost + amount,
+      sessionCost: this.metrics.sessionCost + amount,
+      todayCost: this.metrics.todayCost + amount
     });
   }
 
