@@ -8,7 +8,7 @@ import { describe, it, expect, beforeEach, afterEach, jest } from '@jest/globals
 import { TextSelection } from '../tui/text-selection';
 import { DragSelectionManager } from '../tui/drag-selection';
 import { SelectionRenderer } from '../tui/selection-renderer';
-import { ClipboardManager } from '../tui/clipboard-manager';
+import { ClipboardManager, ClipboardResult } from '../tui/clipboard-manager';
 import { SelectionStateManager } from '../tui/selection-state-manager';
 import { MultilineSelectionHandler } from '../tui/multiline-selection';
 
@@ -232,7 +232,7 @@ describe('Text Selection System Integration', () => {
 
   describe('Error Handling Integration', () => {
     it('handles clipboard failure gracefully', async () => {
-      clipboardManager.copyText = jest.fn().mockRejectedValue(new Error('Clipboard unavailable'));
+      clipboardManager.copyText = jest.fn<(text: string, source?: string) => Promise<ClipboardResult>>().mockRejectedValue(new Error('Clipboard unavailable'));
       
       const startPos = { line: 0, column: 0 };
       const endPos = { line: 0, column: 5 };

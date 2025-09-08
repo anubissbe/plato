@@ -315,7 +315,7 @@ export const ProgressBar: React.FC<ProgressBarProps> = ({
 
   // Layout based on label position
   const content = (
-    <Box flexDirection="row" gap={1} opacity={pulseOpacity}>
+    <Box flexDirection="row" gap={1}>
       {labelPosition === 'left' && labelText}
       {renderBar()}
       {progressText}

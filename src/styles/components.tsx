@@ -20,6 +20,11 @@ export interface StyledBoxProps {
   width?: BoxProps['width'];
   padding?: BoxProps['padding'];
   margin?: BoxProps['margin'];
+  borderStyle?: BoxProps['borderStyle'];
+  minHeight?: BoxProps['minHeight'];
+  minWidth?: BoxProps['minWidth'];
+  alignItems?: BoxProps['alignItems'];
+  justifyContent?: BoxProps['justifyContent'];
 }
 
 export const StyledText: React.FC<StyledTextProps> = ({ type = 'primary', children, ...props }) => {
@@ -47,7 +52,12 @@ export const StyledBox: React.FC<StyledBoxProps> = ({
   height,
   width,
   padding,
-  margin
+  margin,
+  borderStyle,
+  minHeight,
+  minWidth,
+  alignItems,
+  justifyContent
 }) => {
   const manager = getStyleManager();
   const style = manager.getStyle();
@@ -55,7 +65,7 @@ export const StyledBox: React.FC<StyledBoxProps> = ({
   const borderProps = noBorder || style.formatting.borderStyle === 'none' 
     ? {} 
     : {
-        borderStyle: style.formatting.borderStyle,
+        borderStyle: borderStyle || style.formatting.borderStyle,
         borderColor: style.theme.border
       };
   
@@ -67,6 +77,10 @@ export const StyledBox: React.FC<StyledBoxProps> = ({
       flexDirection={flexDirection}
       height={height}
       width={width}
+      minHeight={minHeight}
+      minWidth={minWidth}
+      alignItems={alignItems}
+      justifyContent={justifyContent}
     >
       {children}
     </Box>

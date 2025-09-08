@@ -303,8 +303,6 @@ export const MouseHints: React.FC<MouseHintsProps> = ({
       {showWelcome && settings.enabled && (
         <Box
           position="absolute"
-          top={1}
-          right={1}
           width={Math.min(50, uiBounds.width - 4)}
           paddingX={1}
           borderStyle="round"
@@ -383,8 +381,6 @@ const MouseHint: React.FC<MouseHintProps> = ({ hint, onDismiss, uiBounds }) => {
   return (
     <Box
       position="absolute"
-      top={position.top}
-      left={position.left}
       width={maxWidth}
       paddingX={1}
       paddingY={1}
@@ -427,9 +423,7 @@ const MouseTooltip: React.FC<MouseTooltipProps> = ({ tooltip, onDismiss }) => {
   return (
     <Box
       position="absolute"
-      top={tooltip.position.y}
-      left={tooltip.position.x}
-      maxWidth={tooltip.config.maxWidth}
+      width={tooltip.config.maxWidth}
       paddingX={1}
       borderStyle="round"
       borderColor="gray"

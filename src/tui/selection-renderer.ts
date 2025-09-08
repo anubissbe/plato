@@ -442,7 +442,7 @@ export class SelectionRenderer {
     }
 
     // Intensity adjustments
-    if (style.intensity === 'dim' || style.intensity === 'subtle') {
+    if (style.intensity === 'subtle') {
       startSequence += ANSI_COLORS.dim;
     } else if (style.intensity === 'strong') {
       startSequence += ANSI_COLORS.bold;
@@ -649,7 +649,7 @@ export class SelectionRenderUtils {
     return styles.reduce(
       (merged, style) => ({ ...merged, ...style }),
       DEFAULT_SELECTION_STYLES.default
-    );
+    ) as SelectionStyle;
   }
 
   /**

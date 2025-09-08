@@ -239,7 +239,6 @@ export const StatusLine: React.FC<StatusLineProps> = ({
       backgroundColor={bgColor}
       marginTop={position === 'top' ? 0 : 1}
       marginBottom={position === 'bottom' ? 0 : 1}
-      opacity={pulse ? 0.7 : 1}
     >
       {segments.map((segment, index) => (
         <React.Fragment key={index}>

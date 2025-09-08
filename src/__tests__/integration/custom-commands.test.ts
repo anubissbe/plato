@@ -145,9 +145,9 @@ describe('Custom Commands Integration Tests', () => {
       const customCommand: CustomCommand = {
         name: 'greet',
         description: 'Greet a user',
-        handler: 'echo "Hello, $1!"',
-        validation: { requiredArgs: 1, maxArgs: 1 },
-        metadata: { version: '1.0.0' }
+        script: 'echo "Hello, $1!"',
+        hasArguments: true,
+        metadata: { version: '1.0.0', validation: { requiredArgs: 1, maxArgs: 1 } }
       };
 
       await framework.createTestFile('.plato/commands/greet.json', JSON.stringify(customCommand));
@@ -166,9 +166,9 @@ describe('Custom Commands Integration Tests', () => {
       const strictCommand: CustomCommand = {
         name: 'strict-cmd',
         description: 'Command with strict argument validation',
-        handler: 'echo "Args: $@"',
-        validation: { requiredArgs: 2, maxArgs: 3 },
-        metadata: { version: '1.0.0' }
+        script: 'echo "Args: $@"',
+        hasArguments: true,
+        metadata: { version: '1.0.0', validation: { requiredArgs: 2, maxArgs: 3 } }
       };
 
       await framework.createTestFile('.plato/commands/strict-cmd.json', JSON.stringify(strictCommand));
@@ -194,9 +194,9 @@ describe('Custom Commands Integration Tests', () => {
       const failingCommand: CustomCommand = {
         name: 'fail-cmd',
         description: 'A command that fails',
-        handler: 'exit 1',
-        validation: { requiredArgs: 0, maxArgs: 0 },
-        metadata: { version: '1.0.0' }
+        script: 'exit 1',
+        hasArguments: false,
+        metadata: { version: '1.0.0', validation: { requiredArgs: 0, maxArgs: 0 } }
       };
 
       await framework.createTestFile('.plato/commands/fail-cmd.json', JSON.stringify(failingCommand));
@@ -215,14 +215,14 @@ describe('Custom Commands Integration Tests', () => {
       const complexCommand: CustomCommand = {
         name: 'setup-env',
         description: 'Setup development environment',
-        handler: [
+        script: [
           'echo "Setting up environment..."',
           'mkdir -p temp/logs',
           'echo "Environment ready" > temp/status.txt',
           'echo "Setup complete!"'
         ].join(' && '),
-        validation: { requiredArgs: 0, maxArgs: 1 },
-        metadata: { version: '1.5.0', author: 'DevOps' }
+        hasArguments: true,
+        metadata: { version: '1.5.0', author: 'DevOps', validation: { requiredArgs: 0, maxArgs: 1 } }
       };
 
       await framework.createTestFile('.plato/commands/setup-env.json', JSON.stringify(complexCommand));
@@ -244,16 +244,15 @@ describe('Custom Commands Integration Tests', () => {
     test('should list available custom commands', async () => {
       // Create several custom commands
       const commands = [
-        { name: 'cmd1', description: 'First command', handler: 'echo 1' },
-        { name: 'cmd2', description: 'Second command', handler: 'echo 2' },
-        { name: 'cmd3', description: 'Third command', handler: 'echo 3', aliases: ['c3'] }
+        { name: 'cmd1', description: 'First command', script: 'echo 1', hasArguments: false },
+        { name: 'cmd2', description: 'Second command', script: 'echo 2', hasArguments: false },
+        { name: 'cmd3', description: 'Third command', script: 'echo 3', hasArguments: false, aliases: ['c3'] }
       ];
 
       for (const cmd of commands) {
         const fullCmd: CustomCommand = {
           ...cmd,
-          validation: { requiredArgs: 0, maxArgs: 0 },
-          metadata: { version: '1.0.0' }
+          metadata: { version: '1.0.0', validation: { requiredArgs: 0, maxArgs: 0 } }
         };
         await framework.createTestFile(`.plato/commands/${cmd.name}.json`, JSON.stringify(fullCmd));
       }
@@ -276,11 +275,12 @@ describe('Custom Commands Integration Tests', () => {
       const documentedCommand: CustomCommand = {
         name: 'documented-cmd',
         description: 'A well-documented command',
-        handler: 'echo "Documented command"',
-        validation: { requiredArgs: 1, maxArgs: 2 },
+        script: 'echo "Documented command"',
+        hasArguments: true,
         metadata: {
           version: '2.0.0',
           author: 'Documentation Team',
+          validation: { requiredArgs: 1, maxArgs: 2 },
           examples: [
             'documented-cmd input.txt',
             'documented-cmd input.txt output.txt'
@@ -309,8 +309,8 @@ describe('Custom Commands Integration Tests', () => {
       const initialCommand: CustomCommand = {
         name: 'reload-test',
         description: 'Initial version',
-        handler: 'echo "v1"',
-        validation: { requiredArgs: 0, maxArgs: 0 },
+        script: 'echo "v1"',
+        hasArguments: false,
         metadata: { version: '1.0.0' }
       };
 
@@ -325,7 +325,7 @@ describe('Custom Commands Integration Tests', () => {
       const updatedCommand: CustomCommand = {
         ...initialCommand,
         description: 'Updated version',
-        handler: 'echo "v2"',
+        script: 'echo "v2"',
         metadata: { version: '2.0.0' }
       };
 
@@ -348,8 +348,8 @@ describe('Custom Commands Integration Tests', () => {
       const conflictingCommand: CustomCommand = {
         name: 'help',  // Built-in command name
         description: 'Custom help command',
-        handler: 'echo "Custom help"',
-        validation: { requiredArgs: 0, maxArgs: 0 },
+        script: 'echo "Custom help"',
+        hasArguments: false,
         metadata: { version: '1.0.0' }
       };
 
@@ -374,8 +374,8 @@ describe('Custom Commands Integration Tests', () => {
       for (const cmd of commands) {
         const fullCmd: CustomCommand = {
           ...cmd,
-          handler: 'echo "executing"',
-          validation: { requiredArgs: 0, maxArgs: 0 },
+          script: 'echo "executing"',
+          hasArguments: false,
           metadata: { version: '1.0.0' }
         };
         await framework.createTestFile(`.plato/commands/${cmd.name}.json`, JSON.stringify(fullCmd));
@@ -398,8 +398,8 @@ describe('Custom Commands Integration Tests', () => {
       const historyCommand: CustomCommand = {
         name: 'history-test',
         description: 'Test command for history',
-        handler: 'echo "History test executed"',
-        validation: { requiredArgs: 0, maxArgs: 0 },
+        script: 'echo "History test executed"',
+        hasArguments: false,
         metadata: { version: '1.0.0' }
       };
 
@@ -418,11 +418,11 @@ describe('Custom Commands Integration Tests', () => {
       expect(historyEntry).toBeDefined();
 
       // Restore session in new orchestrator
-      const newOrchestrator = new Orchestrator();
+      const newOrchestrator = orchestrator;
       await newOrchestrator.restoreSession();
 
       const restoredMessages = newOrchestrator.getMessages();
-      const restoredHistoryEntry = restoredMessages.find(m => 
+      const restoredHistoryEntry = restoredMessages.find((m: any) => 
         m.content && m.content.includes('history-test')
       );
       expect(restoredHistoryEntry).toBeDefined();
@@ -435,8 +435,8 @@ describe('Custom Commands Integration Tests', () => {
       const dangerousCommand: CustomCommand = {
         name: 'dangerous-cmd',
         description: 'Potentially dangerous command',
-        handler: 'rm -rf /',  // Dangerous command
-        validation: { requiredArgs: 0, maxArgs: 0 },
+        script: 'rm -rf /',  // Dangerous command
+        hasArguments: false,
         metadata: { version: '1.0.0' }
       };
 
@@ -455,8 +455,8 @@ describe('Custom Commands Integration Tests', () => {
       const invalidMetadataCommand: CustomCommand = {
         name: 'invalid-meta',
         description: 'Command with invalid metadata',
-        handler: 'echo "test"',
-        validation: { requiredArgs: -1, maxArgs: -2 }, // Invalid validation
+        script: 'echo "test"',
+        hasArguments: false, // Invalid validation test
         metadata: { version: 'not-semver' } // Invalid version
       };
 

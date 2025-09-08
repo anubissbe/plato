@@ -79,8 +79,8 @@ export class EnhancedCompactCommand {
     } catch (error) {
       return {
         success: false,
-        message: `Error executing compact command: ${error.message}`,
-        error: error.message
+        message: `Error executing compact command: ${error instanceof Error ? error.message : String(error)}`,
+        error: error instanceof Error ? error.message : String(error)
       };
     }
   }
@@ -192,8 +192,8 @@ export class EnhancedCompactCommand {
     } catch (error) {
       return {
         success: false,
-        message: `❌ Compaction failed: ${error.message}`,
-        error: error.message
+        message: `❌ Compaction failed: ${error instanceof Error ? error.message : String(error)}`,
+        error: error instanceof Error ? error.message : String(error)
       };
     }
   }
@@ -434,8 +434,8 @@ export class EnhancedCompactCommand {
     } catch (error) {
       return {
         success: false,
-        message: `❌ Error updating settings: ${error.message}`,
-        error: error.message
+        message: `❌ Error updating settings: ${error instanceof Error ? error.message : String(error)}`,
+        error: error instanceof Error ? error.message : String(error)
       };
     }
   }
@@ -462,8 +462,8 @@ export class EnhancedCompactCommand {
     } catch (error) {
       return {
         success: false,
-        message: `❌ Error applying preset: ${error.message}`,
-        error: error.message
+        message: `❌ Error applying preset: ${error instanceof Error ? error.message : String(error)}`,
+        error: error instanceof Error ? error.message : String(error)
       };
     }
   }

@@ -9,7 +9,7 @@ import { describe, test, expect, beforeEach, afterEach, jest } from '@jest/globa
 import { orchestrator } from '../../runtime/orchestrator';
 import { IntegrationTestFramework } from './framework.test';
 import type { ChatMessage } from '../../core/types';
-import type { MCPServer } from '../../types/mcp';
+import type { MCPServer } from '../../integrations/mcp';
 
 describe('Orchestrator Workflow Integration Tests', () => {
   let framework: IntegrationTestFramework;

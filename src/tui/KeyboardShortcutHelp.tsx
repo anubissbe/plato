@@ -114,7 +114,7 @@ export const KeyboardShortcutHelp: React.FC<KeyboardShortcutHelpProps> = ({
   const categories = Object.keys(allShortcuts);
 
   return (
-    <StyledBox 
+    <Box 
       flexDirection="column" 
       borderStyle="bold" 
       padding={1}
@@ -148,7 +148,7 @@ export const KeyboardShortcutHelp: React.FC<KeyboardShortcutHelpProps> = ({
             </Box>
             
             {/* Shortcuts in category */}
-            {allShortcuts[category].map((shortcut, idx) => (
+            {(allShortcuts as any)[category].map((shortcut: any, idx: number) => (
               <Box key={idx} paddingLeft={1}>
                 <Box width={20}>
                   <StyledText type="primary">
@@ -177,6 +177,6 @@ export const KeyboardShortcutHelp: React.FC<KeyboardShortcutHelpProps> = ({
           </StyledText>
         </Box>
       </Box>
-    </StyledBox>
+    </Box>
   );
 };

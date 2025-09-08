@@ -89,6 +89,7 @@ export interface IndexingOptions {
   includeNodeModules?: boolean;
   fileExtensions?: string[];
   excludePatterns?: string[];
+  maxFileSize?: number;
 }
 
 export interface FileAnalyzerOptions {

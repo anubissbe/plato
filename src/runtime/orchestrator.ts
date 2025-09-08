@@ -815,6 +815,28 @@ export const orchestrator = {
     } catch (error: any) {
       throw new Error(`Failed to rollback context: ${error?.message || error}`);
     }
+  },
+
+  /**
+   * Add a message to the conversation history
+   */
+  addMessage(message: Msg): void {
+    history.push(message);
+  },
+
+  /**
+   * Get all messages in the conversation
+   */
+  getMessages(): Msg[] {
+    return [...history];
+  },
+
+  /**
+   * Update token usage metrics
+   */
+  updateTokenMetrics(inputTokens: number, outputTokens: number): void {
+    metrics.inputTokens += inputTokens;
+    metrics.outputTokens += outputTokens;
   }
 };
 
