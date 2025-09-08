@@ -227,7 +227,7 @@ async function initializeSessionCostAnalyticsInternal(sessionId: string): Promis
 // Initialize analytics service on first use
 async function ensureAnalyticsService(): Promise<AnalyticsService> {
   if (!analyticsService) {
-    analyticsService = createDefaultAnalyticsService();
+    analyticsService = await createDefaultAnalyticsService();
     await analyticsService.initialize();
   }
   return analyticsService;
@@ -238,13 +238,19 @@ async function ensureAnalyticsService(): Promise<AnalyticsService> {
  */
 function getAnalyticsServiceInstance(): AnalyticsService {
   if (!analyticsService) {
-    analyticsService = createDefaultAnalyticsService();
+    // Create with default options synchronously (fallback)
+    const { AnalyticsService } = require('../services/analytics.js');
+    analyticsService = new AnalyticsService(undefined, {
+      dataDir: '.plato/analytics',
+      autoSave: true,
+      retentionMonths: 6
+    });
     // Initialize asynchronously in background
-    analyticsService.initialize().catch(error => {
+    analyticsService?.initialize().catch((error: any) => {
       console.warn('Failed to initialize analytics service:', error);
     });
   }
-  return analyticsService;
+  return analyticsService!; // We just created it above, so it's not null
 }
 
 /**

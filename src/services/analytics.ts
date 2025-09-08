@@ -7,10 +7,12 @@
 
 export { CostCalculator } from './cost-calculator.js';
 export { AnalyticsManager } from './analytics-manager.js';
+export { AnalyticsConfigManager, getAnalyticsConfigManager, formatCost } from './analytics-config.js';
 export * from './analytics-types.js';
 
 import { CostCalculator } from './cost-calculator.js';
 import { AnalyticsManager } from './analytics-manager.js';
+import { AnalyticsConfigManager, getAnalyticsConfigManager } from './analytics-config.js';
 import { 
   CostMetric, 
   AnalyticsSummary, 
@@ -80,11 +82,12 @@ export class AnalyticsService {
 
     // Create cost metric
     const metric: CostMetric = {
-      timestamp: Date.now(),
+      timestamp: new Date(),
       sessionId: interaction.sessionId,
       model: interaction.model,
       inputTokens: interaction.inputTokens,
       outputTokens: interaction.outputTokens,
+      totalTokens: interaction.inputTokens + interaction.outputTokens,
       cost,
       provider: interaction.provider,
       command: interaction.command,
@@ -304,17 +307,28 @@ export class AnalyticsService {
  * Create a default analytics service instance
  * Used by other parts of the application
  */
-export function createDefaultAnalyticsService(options?: {
+export async function createDefaultAnalyticsService(options?: {
   dataDir?: string;
   autoSave?: boolean;
   retentionMonths?: number;
-}): AnalyticsService {
+}): Promise<AnalyticsService> {
+  const dataDir = options?.dataDir || '.plato/analytics';
+  
+  // Load user configuration
+  const configManager = getAnalyticsConfigManager(dataDir);
+  const config = await configManager.load();
+  
+  // Create service with configuration-driven options
   return new AnalyticsService(
     undefined, // Use default pricing
     {
-      dataDir: options?.dataDir || '.plato/analytics',
-      autoSave: options?.autoSave !== false,
-      retentionMonths: options?.retentionMonths || 6
+      dataDir,
+      autoSave: options?.autoSave ?? config.enableTracking,
+      retentionMonths: options?.retentionMonths ?? config.retentionMonths,
+      enableCache: true,
+      batchSize: 100,
+      maxBatchWaitTime: 5000,
+      intelligentBatching: true
     }
   );
 }

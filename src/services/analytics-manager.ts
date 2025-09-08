@@ -16,6 +16,7 @@ import {
   AnalyticsIndex,
   ExportFormat,
   DateRange,
+  ExpensiveSession,
   MetricValidationError,
   PerformanceMetrics,
   TypeGuards
@@ -149,13 +150,13 @@ export class AnalyticsManager {
 
       // Add any pending metrics that fall within the range
       const pendingInRange = this.pendingMetrics.filter(
-        metric => metric.timestamp >= startDate && metric.timestamp <= endDate
+        metric => new Date(metric.timestamp).getTime() >= startDate && new Date(metric.timestamp).getTime() <= endDate
       );
       allMetrics = allMetrics.concat(pendingInRange);
 
       // Filter metrics by date range and apply additional filters
       let filteredMetrics = allMetrics.filter(
-        metric => metric.timestamp >= startDate && metric.timestamp <= endDate
+        metric => new Date(metric.timestamp).getTime() >= startDate && new Date(metric.timestamp).getTime() <= endDate
       );
 
       // Apply additional query options
@@ -223,8 +224,8 @@ export class AnalyticsManager {
     const startTime = Date.now();
     
     // Default to last 30 days if no range specified
-    const endDate = dateRange?.[1] || Date.now();
-    const startDate = dateRange?.[0] || (endDate - (30 * 24 * 60 * 60 * 1000));
+    const endDate = dateRange?.end ? new Date(dateRange.end).getTime() : Date.now();
+    const startDate = dateRange?.start ? new Date(dateRange.start).getTime() : (endDate - (30 * 24 * 60 * 60 * 1000));
 
     // Get metrics for the range
     const metrics = await this.getMetrics(startDate, endDate);
@@ -289,6 +290,74 @@ export class AnalyticsManager {
       }
     } catch (error) {
       console.error(`Cleanup failed: ${error instanceof Error ? error.message : 'Unknown error'}`);
+    }
+  }
+
+  /**
+   * Compact analytics data for storage optimization
+   * Removes duplicate entries and optimizes data structure
+   */
+  async compact(): Promise<void> {
+    if (!this.initialized) {
+      await this.initialize();
+    }
+
+    try {
+      const files = await fs.readdir(this.options.dataDir);
+      const dataFiles = files.filter(file => file.endsWith('.json') && file !== 'analytics-index.json');
+      let totalSavings = 0;
+
+      for (const fileName of dataFiles) {
+        const filePath = path.join(this.options.dataDir, fileName);
+        
+        try {
+          const fileContent = await fs.readFile(filePath, 'utf-8');
+          const dataFile: AnalyticsDataFile = JSON.parse(fileContent);
+          const originalSize = Buffer.byteLength(fileContent, 'utf8');
+          
+          // Remove duplicate metrics (same timestamp, sessionId, model)
+          const uniqueMetrics = new Map<string, CostMetric>();
+          for (const metric of dataFile.metrics) {
+            const key = `${new Date(metric.timestamp).getTime()}-${metric.sessionId}-${metric.model}`;
+            if (!uniqueMetrics.has(key)) {
+              uniqueMetrics.set(key, metric);
+            }
+          }
+
+          // Check if compaction would save space
+          const compactedMetrics = Array.from(uniqueMetrics.values());
+          if (compactedMetrics.length < dataFile.metrics.length) {
+            // Update data file with compacted metrics
+            dataFile.metrics = compactedMetrics;
+            dataFile.metadata.count = compactedMetrics.length;
+            dataFile.metadata.totalCost = compactedMetrics.reduce((sum, m) => sum + m.cost, 0);
+            dataFile.metadata.updatedAt = Date.now();
+
+            // Save compacted file
+            const compactedContent = JSON.stringify(dataFile, null, 2);
+            const compactedSize = Buffer.byteLength(compactedContent, 'utf8');
+            const savings = originalSize - compactedSize;
+            
+            await fs.writeFile(filePath, compactedContent, 'utf-8');
+            totalSavings += savings;
+            
+            console.log(`Compacted ${fileName}: removed ${dataFile.metrics.length - compactedMetrics.length} duplicates, saved ${savings} bytes`);
+          }
+        } catch (error) {
+          console.warn(`Failed to compact file ${fileName}:`, error);
+          continue;
+        }
+      }
+
+      // Rebuild index after compaction
+      if (totalSavings > 0) {
+        await this.rebuildIndex();
+        console.log(`Data compaction completed. Total space saved: ${totalSavings} bytes`);
+      } else {
+        console.log('No data compaction was needed');
+      }
+    } catch (error) {
+      console.error(`Data compaction failed: ${error instanceof Error ? error.message : 'Unknown error'}`);
     }
   }
 
@@ -374,7 +443,7 @@ export class AnalyticsManager {
       );
     }
 
-    if (metric.timestamp > Date.now() + 60000) { // Allow 1 minute clock skew
+    if (new Date(metric.timestamp).getTime() > Date.now() + 60000) { // Allow 1 minute clock skew
       throw new MetricValidationError(
         'Timestamp cannot be in the future',
         'timestamp',
@@ -656,8 +725,8 @@ export class AnalyticsManager {
               path: fileName,
               count: dataFile.metadata.count || dataFile.metrics.length,
               dateRange: [
-                Math.min(...dataFile.metrics.map(m => m.timestamp)),
-                Math.max(...dataFile.metrics.map(m => m.timestamp))
+                Math.min(...dataFile.metrics.map(m => new Date(m.timestamp).getTime())),
+                Math.max(...dataFile.metrics.map(m => new Date(m.timestamp).getTime()))
               ],
               totalCost: dataFile.metadata.totalCost || dataFile.metrics.reduce((sum, m) => sum + m.cost, 0),
               lastModified: stats.mtime.getTime()
@@ -804,6 +873,9 @@ export class AnalyticsManager {
       filtered.sort((a, b) => {
         const aVal = a[options.sortBy!];
         const bVal = b[options.sortBy!];
+        if (aVal === undefined || bVal === undefined) {
+          return 0;
+        }
         return (aVal > bVal ? 1 : aVal < bVal ? -1 : 0) * order;
       });
     }
@@ -867,25 +939,61 @@ export class AnalyticsManager {
     const totalTokens = metrics.reduce((sum, m) => sum + m.inputTokens + m.outputTokens, 0);
     const uniqueSessions = new Set(metrics.map(m => m.sessionId)).size;
 
-    // Generate model breakdown
-    const modelBreakdown: Record<string, { cost: number; tokens: number }> = {};
+    // Generate cost breakdown by model
+    const costByModel: Record<string, number> = {};
+    const costByProvider: Record<string, number> = {};
+    
     for (const metric of metrics) {
-      if (!modelBreakdown[metric.model]) {
-        modelBreakdown[metric.model] = { cost: 0, tokens: 0 };
+      // Cost by model
+      if (!costByModel[metric.model]) {
+        costByModel[metric.model] = 0;
       }
-      modelBreakdown[metric.model].cost += metric.cost;
-      modelBreakdown[metric.model].tokens += metric.inputTokens + metric.outputTokens;
+      costByModel[metric.model] += metric.cost;
+      
+      // Cost by provider
+      if (!costByProvider[metric.provider]) {
+        costByProvider[metric.provider] = 0;
+      }
+      costByProvider[metric.provider] += metric.cost;
+    }
+    
+    // Find most expensive session
+    const sessionCosts: Record<string, number> = {};
+    for (const metric of metrics) {
+      if (!sessionCosts[metric.sessionId]) {
+        sessionCosts[metric.sessionId] = 0;
+      }
+      sessionCosts[metric.sessionId] += metric.cost;
+    }
+    
+    let mostExpensiveSession: ExpensiveSession | undefined;
+    let maxCost = 0;
+    for (const [sessionId, cost] of Object.entries(sessionCosts)) {
+      if (cost > maxCost) {
+        maxCost = cost;
+        const sessionMetrics = metrics.filter(m => m.sessionId === sessionId);
+        const tokens = sessionMetrics.reduce((sum, m) => sum + m.inputTokens + m.outputTokens, 0);
+        mostExpensiveSession = {
+          sessionId,
+          cost,
+          tokens,
+          timestamp: sessionMetrics[0].timestamp
+        };
+      }
     }
 
     return {
-      period,
-      startDate,
-      endDate,
+      dateRange: {
+        start: new Date(startDate),
+        end: new Date(endDate)
+      },
       totalCost: Math.round(totalCost * 100) / 100, // Round to cents
       totalTokens,
       sessionCount: uniqueSessions,
-      avgCostPerSession: uniqueSessions > 0 ? Math.round((totalCost / uniqueSessions) * 100) / 100 : 0,
-      modelBreakdown
+      averageCostPerSession: uniqueSessions > 0 ? Math.round((totalCost / uniqueSessions) * 100) / 100 : 0,
+      costByProvider,
+      costByModel,
+      mostExpensiveSession
     };
   }
 
@@ -893,32 +1001,59 @@ export class AnalyticsManager {
    * Generate CSV export
    */
   private generateCSVExport(metrics: CostMetric[]): string {
+    // Helper function to escape CSV values
+    const escapeCSV = (value: any): string => {
+      if (value === null || value === undefined) return '';
+      const str = String(value);
+      // Quote if contains comma, quote, newline, or starts/ends with whitespace
+      if (str.includes(',') || str.includes('"') || str.includes('\n') || str.includes('\r') || str !== str.trim()) {
+        return `"${str.replace(/"/g, '""')}"`;
+      }
+      return str;
+    };
+
     const headers = [
       'timestamp',
-      'sessionId',
+      'provider',
       'model',
       'inputTokens',
       'outputTokens',
+      'totalTokens',
       'cost',
-      'provider',
-      'command',
-      'duration'
+      'sessionId',
+      'duration',
+      'command'
     ];
+
+    // Add metadata fields if present
+    if (metrics.length > 0 && metrics[0].metadata) {
+      const metadataKeys = Object.keys(metrics[0].metadata);
+      headers.push(...metadataKeys);
+    }
 
     const csvLines = [headers.join(',')];
     
     for (const metric of metrics) {
       const row = [
-        metric.timestamp.toString(),
-        `"${metric.sessionId}"`,
-        `"${metric.model}"`,
+        metric.timestamp instanceof Date ? metric.timestamp.toISOString() : new Date(metric.timestamp).toISOString(),
+        escapeCSV(metric.provider),
+        escapeCSV(metric.model),
         metric.inputTokens.toString(),
         metric.outputTokens.toString(),
-        metric.cost.toString(),
-        `"${metric.provider}"`,
-        `"${metric.command || ''}"`,
-        metric.duration.toString()
+        (metric.totalTokens || metric.inputTokens + metric.outputTokens).toString(),
+        metric.cost.toFixed(6),
+        escapeCSV(metric.sessionId),
+        (metric.duration || 0).toString(),
+        escapeCSV(metric.command || '')
       ];
+      
+      // Add metadata values if present
+      if (metric.metadata) {
+        for (const key of Object.keys(metrics[0].metadata || {})) {
+          row.push(escapeCSV(metric.metadata[key] || ''));
+        }
+      }
+      
       csvLines.push(row.join(','));
     }
 
@@ -928,16 +1063,55 @@ export class AnalyticsManager {
   /**
    * Generate JSON export
    */
-  private generateJSONExport(metrics: CostMetric[], startDate: number, endDate: number): string {
+  private generateJSONExport(metrics: CostMetric[], startDate: number | Date, endDate: number | Date): string {
+    const totalCost = metrics.reduce((sum, m) => sum + m.cost, 0);
+    const totalTokens = metrics.reduce((sum, m) => sum + (m.totalTokens || m.inputTokens + m.outputTokens), 0);
+    const totalInputTokens = metrics.reduce((sum, m) => sum + m.inputTokens, 0);
+    const totalOutputTokens = metrics.reduce((sum, m) => sum + m.outputTokens, 0);
+    
+    // Group by provider and model
+    const providerStats: Record<string, { cost: number; tokens: number; count: number }> = {};
+    const modelStats: Record<string, { cost: number; tokens: number; count: number }> = {};
+    
+    for (const metric of metrics) {
+      // Provider stats
+      if (!providerStats[metric.provider]) {
+        providerStats[metric.provider] = { cost: 0, tokens: 0, count: 0 };
+      }
+      providerStats[metric.provider].cost += metric.cost;
+      providerStats[metric.provider].tokens += metric.totalTokens || (metric.inputTokens + metric.outputTokens);
+      providerStats[metric.provider].count++;
+      
+      // Model stats
+      if (!modelStats[metric.model]) {
+        modelStats[metric.model] = { cost: 0, tokens: 0, count: 0 };
+      }
+      modelStats[metric.model].cost += metric.cost;
+      modelStats[metric.model].tokens += metric.totalTokens || (metric.inputTokens + metric.outputTokens);
+      modelStats[metric.model].count++;
+    }
+    
     const exportData = {
-      exportMetadata: {
-        generatedAt: Date.now(),
-        startDate,
-        endDate,
-        totalMetrics: metrics.length,
-        totalCost: metrics.reduce((sum, m) => sum + m.cost, 0)
+      exportDate: new Date().toISOString(),
+      dateRange: {
+        start: startDate instanceof Date ? startDate.toISOString() : new Date(startDate).toISOString(),
+        end: endDate instanceof Date ? endDate.toISOString() : new Date(endDate).toISOString()
       },
-      metrics
+      summary: {
+        totalCost: Math.round(totalCost * 1000000) / 1000000, // Round to 6 decimal places
+        totalTokens,
+        totalInputTokens,
+        totalOutputTokens,
+        recordCount: metrics.length,
+        avgCostPerRecord: metrics.length > 0 ? Math.round((totalCost / metrics.length) * 1000000) / 1000000 : 0,
+        avgTokensPerRecord: metrics.length > 0 ? Math.round(totalTokens / metrics.length) : 0,
+        providerBreakdown: providerStats,
+        modelBreakdown: modelStats
+      },
+      metrics: metrics.map(m => ({
+        ...m,
+        timestamp: m.timestamp instanceof Date ? m.timestamp.toISOString() : new Date(m.timestamp).toISOString()
+      }))
     };
 
     return JSON.stringify(exportData, null, 2);

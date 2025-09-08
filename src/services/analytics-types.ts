@@ -10,8 +10,8 @@
  * Tracks token usage, cost, and performance data for analytics
  */
 export interface CostMetric {
-  /** Timestamp when the metric was recorded (Unix timestamp in milliseconds) */
-  timestamp: number;
+  /** Timestamp when the metric was recorded (Date object) */
+  timestamp: Date;
   
   /** Unique identifier for the conversation session */
   sessionId: string;
@@ -25,17 +25,47 @@ export interface CostMetric {
   /** Number of tokens in the generated output */
   outputTokens: number;
   
+  /** Total tokens (input + output) */
+  totalTokens: number;
+  
   /** Calculated cost in USD for this interaction */
   cost: number;
   
-  /** AI provider used ('copilot', 'openai', 'claude') */
-  provider: 'copilot' | 'openai' | 'claude';
+  /** AI provider used */
+  provider: string;
   
   /** Optional command that triggered this interaction (e.g., '/analyze', '/build') */
   command?: string;
   
   /** Duration of the interaction in milliseconds */
-  duration: number;
+  duration?: number;
+  
+  /** Additional metadata */
+  metadata?: Record<string, any>;
+}
+
+/**
+ * Date range for filtering
+ */
+export interface DateRange {
+  start: Date;
+  end: Date;
+}
+
+/**
+ * Export format options
+ */
+export type ExportFormat = 'json' | 'csv';
+
+
+/**
+ * Most expensive session information
+ */
+export interface ExpensiveSession {
+  sessionId: string;
+  cost: number;
+  tokens: number;
+  timestamp: Date;
 }
 
 /**
@@ -43,14 +73,8 @@ export interface CostMetric {
  * Provides high-level cost and usage insights
  */
 export interface AnalyticsSummary {
-  /** Time period for this summary */
-  period: 'day' | 'week' | 'month';
-  
-  /** Start of the period (Unix timestamp in milliseconds) */
-  startDate: number;
-  
-  /** End of the period (Unix timestamp in milliseconds) */
-  endDate: number;
+  /** Date range for this summary */
+  dateRange: DateRange;
   
   /** Total cost for all interactions in this period */
   totalCost: number;
@@ -62,15 +86,16 @@ export interface AnalyticsSummary {
   sessionCount: number;
   
   /** Average cost per session in this period */
-  avgCostPerSession: number;
+  averageCostPerSession: number;
   
-  /** Cost and token breakdown by model */
-  modelBreakdown: Record<string, {
-    /** Total cost for this model */
-    cost: number;
-    /** Total tokens for this model */
-    tokens: number;
-  }>;
+  /** Cost breakdown by provider */
+  costByProvider: Record<string, number>;
+  
+  /** Cost breakdown by model */
+  costByModel: Record<string, number>;
+  
+  /** Most expensive session information */
+  mostExpensiveSession?: ExpensiveSession;
 }
 
 /**
@@ -122,19 +147,12 @@ export interface TokenPricing {
 export type ProviderPricing = Record<string, TokenPricing>;
 
 /**
- * Analytics export format options
- */
-export type ExportFormat = 'csv' | 'json';
-
-/**
- * Date range for analytics queries and exports
- */
-export type DateRange = [number, number];
-
-/**
  * Analytics query options for filtering and grouping data
  */
 export interface AnalyticsQueryOptions {
+  /** Date range for the query */
+  dateRange?: DateRange;
+  
   /** Start date for the query (Unix timestamp) */
   startDate?: number;
   
@@ -148,7 +166,7 @@ export interface AnalyticsQueryOptions {
   model?: string;
   
   /** Filter by specific provider */
-  provider?: 'copilot' | 'openai' | 'claude';
+  provider?: string;
   
   /** Filter by specific command */
   command?: string;
@@ -160,7 +178,7 @@ export interface AnalyticsQueryOptions {
   offset?: number;
   
   /** Sort order for results */
-  sortBy?: 'timestamp' | 'cost' | 'duration';
+  sortBy?: keyof CostMetric;
   
   /** Sort direction */
   sortOrder?: 'asc' | 'desc';
