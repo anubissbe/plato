@@ -124,6 +124,34 @@ export class KeyboardShortcutManager {
       handler: () => this.quickSearch(),
       category: 'Search',
     });
+
+    // Cost analytics shortcuts
+    this.register({
+      id: 'toggle-cost-analytics',
+      name: 'Toggle Cost Analytics',
+      description: 'Show/hide cost analytics in status line',
+      binding: { key: 'c', modifiers: { alt: true } },
+      handler: () => this.toggleCostAnalytics(),
+      category: 'Cost Analytics',
+    });
+
+    this.register({
+      id: 'toggle-detailed-cost',
+      name: 'Toggle Detailed Cost Analytics',
+      description: 'Show/hide detailed cost analytics with projections',
+      binding: { key: 'c', modifiers: { alt: true, shift: true } },
+      handler: () => this.toggleDetailedCostAnalytics(),
+      category: 'Cost Analytics',
+    });
+
+    this.register({
+      id: 'toggle-current-cost',
+      name: 'Toggle Current Cost',
+      description: 'Show/hide current cost display',
+      binding: { key: '$', modifiers: { alt: true } },
+      handler: () => this.toggleCurrentCost(),
+      category: 'Cost Analytics',
+    });
   }
 
   /**
@@ -447,6 +475,37 @@ export class KeyboardShortcutManager {
 
   private quickSearch(): void {
     console.log('Quick search');
+  }
+
+  // Cost analytics handlers
+  private async toggleCostAnalytics(): Promise<void> {
+    try {
+      const { toggleCostAnalytics } = await import('./status-config.js');
+      const enabled = await toggleCostAnalytics();
+      console.log(`Cost analytics ${enabled ? 'enabled' : 'disabled'}`);
+    } catch (error) {
+      console.error('Failed to toggle cost analytics:', error);
+    }
+  }
+
+  private async toggleDetailedCostAnalytics(): Promise<void> {
+    try {
+      const { toggleDetailedCostAnalytics } = await import('./status-config.js');
+      const enabled = await toggleDetailedCostAnalytics();
+      console.log(`Detailed cost analytics ${enabled ? 'enabled' : 'disabled'}`);
+    } catch (error) {
+      console.error('Failed to toggle detailed cost analytics:', error);
+    }
+  }
+
+  private async toggleCurrentCost(): Promise<void> {
+    try {
+      const { toggleCurrentCost } = await import('./status-config.js');
+      const enabled = await toggleCurrentCost();
+      console.log(`Current cost display ${enabled ? 'enabled' : 'disabled'}`);
+    } catch (error) {
+      console.error('Failed to toggle current cost:', error);
+    }
   }
 }
 

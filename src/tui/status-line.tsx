@@ -95,16 +95,56 @@ export const StatusLine: React.FC<StatusLineProps> = ({
     return `${mb.toFixed(1)}MB`;
   };
 
+  // Cost formatting functions
+  const formatCost = (cost: number): string => {
+    const formatter = formatters.currentCost;
+    if (formatter) return formatter(cost);
+    
+    if (cost >= 1) {
+      return `$${cost.toFixed(2)}`;
+    } else if (cost >= 0.01) {
+      return `$${cost.toFixed(3)}`;
+    } else if (cost >= 0.001) {
+      return `$${cost.toFixed(4)}`;
+    } else {
+      return `$${cost.toFixed(6)}`;
+    }
+  };
+
+  const getCostColor = (cost: number, threshold?: number): string => {
+    if (!threshold) return 'cyan';
+    
+    const percentage = (cost / threshold) * 100;
+    if (percentage >= 90) return 'red';
+    if (percentage >= 70) return 'yellow';
+    return 'green';
+  };
+
+  const formatProvider = (provider?: string, model?: string): string => {
+    if (!provider && !model) return '';
+    if (compact) {
+      return provider ? provider.charAt(0).toUpperCase() : (model ? model.substring(0, 3) : '');
+    }
+    return [provider, model].filter(Boolean).join('/');
+  };
+
   // Determine which metrics to show
   const metricsToShow = useMemo(() => {
     if (visibleMetrics) {
       return visibleMetrics;
     }
     
-    // Default visible metrics
-    return compact
+    // Default visible metrics - include cost metrics when available
+    const defaultMetrics = compact
       ? ['totalTokens', 'responseTime', 'memoryUsageMB']
       : ['inputTokens', 'outputTokens', 'totalTokens', 'responseTime', 'memoryUsageMB', 'memoryPercentage'];
+    
+    // Add cost metrics if they have values
+    if (metrics.currentCost > 0 || metrics.sessionCost > 0) {
+      defaultMetrics.push('currentCost', 'sessionCost');
+    }
+    
+    return defaultMetrics;
   }, [visibleMetrics, compact]);
 
   // Build status segments
@@ -211,6 +251,151 @@ export const StatusLine: React.FC<StatusLineProps> = ({
     );
   }
 
+  // Cost metrics - make clickable for interaction
+  if (metricsToShow.includes('currentCost') && metrics.currentCost > 0) {
+    const costColor = getCostColor(metrics.currentCost, metrics.costThreshold);
+    const costElement = (
+      <Text key="currentCost" color={costColor}>
+        {compact ? '$:' : 'Cost: '}{formatCost(metrics.currentCost)}
+      </Text>
+    );
+    
+    if (onMetricClick) {
+      segments.push(
+        <Text key="currentCost-wrapper" color={costColor} dimColor={false}>
+          {React.cloneElement(costElement, {
+            onClick: () => onMetricClick('currentCost'),
+            style: { cursor: 'pointer' }
+          })}
+        </Text>
+      );
+    } else {
+      segments.push(costElement);
+    }
+  }
+
+  if (metricsToShow.includes('sessionCost') && metrics.sessionCost > 0) {
+    const costColor = getCostColor(metrics.sessionCost, metrics.costThreshold);
+    const sessionCostElement = (
+      <Text key="sessionCost" color={costColor}>
+        {compact ? 'S$:' : 'Session: '}{formatCost(metrics.sessionCost)}
+      </Text>
+    );
+    
+    if (onMetricClick) {
+      segments.push(
+        <Text key="sessionCost-wrapper" color={costColor} dimColor={false}>
+          {React.cloneElement(sessionCostElement, {
+            onClick: () => onMetricClick('sessionCost'),
+            style: { cursor: 'pointer' }
+          })}
+        </Text>
+      );
+    } else {
+      segments.push(sessionCostElement);
+    }
+  }
+
+  if (metricsToShow.includes('todayCost') && metrics.todayCost > 0) {
+    const todayCostElement = (
+      <Text key="todayCost" color="cyan">
+        {compact ? 'D$:' : 'Today: '}{formatCost(metrics.todayCost)}
+      </Text>
+    );
+    
+    if (onMetricClick) {
+      segments.push(
+        <Text key="todayCost-wrapper" color="cyan" dimColor={false}>
+          {React.cloneElement(todayCostElement, {
+            onClick: () => onMetricClick('todayCost'),
+            style: { cursor: 'pointer' }
+          })}
+        </Text>
+      );
+    } else {
+      segments.push(todayCostElement);
+    }
+  }
+
+  if (metricsToShow.includes('costPerToken') && metrics.costPerToken > 0) {
+    const costPerTokenElement = (
+      <Text key="costPerToken" color="gray">
+        {compact ? '$/T:' : 'Per Token: '}{formatCost(metrics.costPerToken)}
+      </Text>
+    );
+    
+    if (onMetricClick) {
+      segments.push(
+        <Text key="costPerToken-wrapper" color="gray" dimColor={false}>
+          {React.cloneElement(costPerTokenElement, {
+            onClick: () => onMetricClick('costPerToken'),
+            style: { cursor: 'pointer' }
+          })}
+        </Text>
+      );
+    } else {
+      segments.push(costPerTokenElement);
+    }
+  }
+
+  if (metricsToShow.includes('projectedCost') && metrics.projectedCost && metrics.projectedCost > 0) {
+    const projectedColor = getCostColor(metrics.projectedCost, metrics.costThreshold);
+    const projectedCostElement = (
+      <Text key="projectedCost" color={projectedColor}>
+        {compact ? 'P$:' : 'Projected: '}{formatCost(metrics.projectedCost)}
+      </Text>
+    );
+    
+    if (onMetricClick) {
+      segments.push(
+        <Text key="projectedCost-wrapper" color={projectedColor} dimColor={false}>
+          {React.cloneElement(projectedCostElement, {
+            onClick: () => onMetricClick('projectedCost'),
+            style: { cursor: 'pointer' }
+          })}
+        </Text>
+      );
+    } else {
+      segments.push(projectedCostElement);
+    }
+  }
+
+  // Provider/Model display
+  if ((metricsToShow.includes('provider') || metricsToShow.includes('model')) && 
+      (metrics.provider || metrics.model)) {
+    const providerText = formatProvider(metrics.provider, metrics.model);
+    if (providerText) {
+      const providerElement = (
+        <Text key="provider" color="gray">
+          {compact ? '' : 'Provider: '}{providerText}
+        </Text>
+      );
+      
+      if (onMetricClick) {
+        segments.push(
+          <Text key="provider-wrapper" color="gray" dimColor={false}>
+            {React.cloneElement(providerElement, {
+              onClick: () => onMetricClick(metrics.provider ? 'provider' : 'model'),
+              style: { cursor: 'pointer' }
+            })}
+          </Text>
+        );
+      } else {
+        segments.push(providerElement);
+      }
+    }
+  }
+
+  // Cost threshold warning
+  if (metrics.costThreshold && 
+      (metrics.currentCost >= metrics.costThreshold || metrics.sessionCost >= metrics.costThreshold)) {
+    segments.push(
+      <Text key="costWarning" color="red" bold>
+        {compact ? '💰!' : '⚠️ Cost Limit'}
+      </Text>
+    );
+  }
+
   // Error display
   if (metrics.lastError) {
     segments.push(
@@ -223,7 +408,7 @@ export const StatusLine: React.FC<StatusLineProps> = ({
   // Accessibility text
   const accessibilityText = includeAccessibilityText ? (
     <Text dimColor>
-      {`Status: ${state}, Tokens: ${metrics.totalTokens}, Response: ${formatTime(metrics.responseTime)}, Memory: ${formatMemory(metrics.memoryUsageMB)}`}
+      {`Status: ${state}, Tokens: ${metrics.totalTokens}, Response: ${formatTime(metrics.responseTime)}, Memory: ${formatMemory(metrics.memoryUsageMB)}${metrics.currentCost > 0 ? `, Cost: ${formatCost(metrics.currentCost)}` : ''}`}
     </Text>
   ) : null;
 

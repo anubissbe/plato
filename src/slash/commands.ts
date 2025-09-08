@@ -17,6 +17,7 @@ export const SLASH_COMMANDS: SlashCommand[] = [
   { name: '/output-style', summary: 'Set or switch output style' },
   { name: '/output-style:new', summary: 'Create a custom output style' },
   { name: '/cost', summary: 'Show tokens, cost, and duration' },
+  { name: '/analytics', summary: 'View and manage cost tracking analytics' },
   { name: '/doctor', summary: 'Diagnose setup and connectivity' },
   { name: '/compact', summary: 'Compact conversation history with optional focus instructions' },
   { name: '/export', summary: 'Export conversation to file or clipboard' },

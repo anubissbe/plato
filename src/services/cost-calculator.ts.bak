@@ -1,0 +1,333 @@
+/**
+ * Cost Calculator Service
+ * 
+ * Provides cost calculation functionality for different AI providers
+ * Based on token usage and provider-specific pricing models
+ */
+
+import { TokenPricing, ProviderPricing, MetricValidationError } from './analytics-types.js';
+
+/**
+ * CostCalculator - Calculates AI usage costs based on provider pricing
+ * 
+ * Supports multiple providers with different pricing models and allows
+ * dynamic pricing updates for changing provider rates
+ */
+export class CostCalculator {
+  /**
+   * Default pricing for AI providers (cost per token in USD)
+   * Based on current market rates as of 2025-09-08
+   */
+  private static readonly DEFAULT_PRICING: ProviderPricing = {
+    'copilot': { 
+      input: 0.000002,  // $0.002 per 1K input tokens
+      output: 0.000008  // $0.008 per 1K output tokens
+    },
+    'gpt-4': { 
+      input: 0.00003,   // $0.03 per 1K input tokens
+      output: 0.00006   // $0.06 per 1K output tokens
+    },
+    'claude-3': { 
+      input: 0.000015,  // $0.015 per 1K input tokens
+      output: 0.000075  // $0.075 per 1K output tokens
+    }
+  };
+
+  /**
+   * Current pricing configuration (can be updated at runtime)
+   */
+  private pricing: ProviderPricing;
+
+  /**
+   * Initialize the cost calculator with default or custom pricing
+   */
+  constructor(customPricing?: Partial<ProviderPricing>) {
+    this.pricing = { 
+      ...CostCalculator.DEFAULT_PRICING,
+      ...customPricing 
+    };
+  }
+
+  /**
+   * Calculate the cost for an AI interaction
+   * 
+   * @param provider - AI provider name ('copilot', 'gpt-4', 'claude-3', etc.)
+   * @param model - Specific model name (for future multi-model support)
+   * @param inputTokens - Number of tokens in the input/prompt
+   * @param outputTokens - Number of tokens in the generated response
+   * @returns Total cost in USD for this interaction
+   * 
+   * @example
+   * ```typescript
+   * const calculator = new CostCalculator();
+   * const cost = calculator.calculateCost('copilot', 'gpt-3.5-turbo', 1000, 500);
+   * console.log(`Cost: $${cost.toFixed(4)}`); // Cost: $0.0060
+   * ```
+   */
+  calculateCost(
+    provider: string, 
+    model: string, 
+    inputTokens: number, 
+    outputTokens: number
+  ): number {
+    // Validate inputs
+    this.validateCalculationInputs(provider, model, inputTokens, outputTokens);
+
+    // Get pricing for this provider
+    const providerPricing = this.pricing[provider];
+    if (!providerPricing) {
+      // Return 0 for unknown providers rather than throwing
+      // This allows graceful handling of new providers
+      return 0;
+    }
+
+    // Calculate total cost
+    const inputCost = inputTokens * providerPricing.input;
+    const outputCost = outputTokens * providerPricing.output;
+    const totalCost = inputCost + outputCost;
+
+    // Round to avoid floating point precision issues
+    return Math.round(totalCost * 1000000) / 1000000; // Round to 6 decimal places
+  }
+
+  /**
+   * Update pricing for a specific provider
+   * 
+   * @param provider - Provider name to update
+   * @param pricing - New pricing configuration
+   * 
+   * @example
+   * ```typescript
+   * calculator.updatePricing('copilot', {
+   *   input: 0.000001,
+   *   output: 0.000004
+   * });
+   * ```
+   */
+  updatePricing(provider: string, pricing: TokenPricing): void {
+    // Validate pricing input
+    if (typeof pricing.input !== 'number' || typeof pricing.output !== 'number') {
+      throw new MetricValidationError(
+        'Pricing must contain valid input and output numbers',
+        'cost',
+        pricing
+      );
+    }
+
+    if (pricing.input < 0 || pricing.output < 0) {
+      throw new MetricValidationError(
+        'Pricing values cannot be negative',
+        'cost',
+        pricing
+      );
+    }
+
+    // Update the pricing
+    this.pricing[provider] = { ...pricing };
+  }
+
+  /**
+   * Get current pricing for a provider
+   * 
+   * @param provider - Provider name
+   * @returns Current pricing configuration or undefined if not found
+   */
+  getPricing(provider: string): TokenPricing | undefined {
+    return this.pricing[provider] ? { ...this.pricing[provider] } : undefined;
+  }
+
+  /**
+   * Get all current provider pricing
+   * 
+   * @returns Copy of all provider pricing configurations
+   */
+  getAllPricing(): ProviderPricing {
+    // Return a deep copy to prevent external modification
+    const copy: ProviderPricing = {};
+    for (const [provider, pricing] of Object.entries(this.pricing)) {
+      copy[provider] = { ...pricing };
+    }
+    return copy;
+  }
+
+  /**
+   * Check if a provider is supported
+   * 
+   * @param provider - Provider name to check
+   * @returns True if provider is supported
+   */
+  isProviderSupported(provider: string): boolean {
+    return provider in this.pricing;
+  }
+
+  /**
+   * Get list of supported providers
+   * 
+   * @returns Array of supported provider names
+   */
+  getSupportedProviders(): string[] {
+    return Object.keys(this.pricing);
+  }
+
+  /**
+   * Reset pricing to default values
+   */
+  resetToDefaultPricing(): void {
+    this.pricing = { ...CostCalculator.DEFAULT_PRICING };
+  }
+
+  /**
+   * Calculate cost breakdown for detailed analysis
+   * 
+   * @param provider - AI provider name
+   * @param model - Model name
+   * @param inputTokens - Input token count
+   * @param outputTokens - Output token count
+   * @returns Detailed cost breakdown
+   */
+  calculateCostBreakdown(
+    provider: string,
+    model: string,
+    inputTokens: number,
+    outputTokens: number
+  ): {
+    provider: string;
+    model: string;
+    inputTokens: number;
+    outputTokens: number;
+    inputCost: number;
+    outputCost: number;
+    totalCost: number;
+    pricing: TokenPricing | null;
+  } {
+    this.validateCalculationInputs(provider, model, inputTokens, outputTokens);
+
+    const providerPricing = this.pricing[provider] || null;
+    const inputCost = providerPricing ? inputTokens * providerPricing.input : 0;
+    const outputCost = providerPricing ? outputTokens * providerPricing.output : 0;
+    const totalCost = inputCost + outputCost;
+
+    return {
+      provider,
+      model,
+      inputTokens,
+      outputTokens,
+      inputCost: Math.round(inputCost * 1000000) / 1000000,
+      outputCost: Math.round(outputCost * 1000000) / 1000000,
+      totalCost: Math.round(totalCost * 1000000) / 1000000,
+      pricing: providerPricing ? { ...providerPricing } : null
+    };
+  }
+
+  /**
+   * Estimate monthly cost based on daily usage patterns
+   * 
+   * @param dailyMetrics - Average daily usage
+   * @returns Estimated monthly cost
+   */
+  estimateMonthlyCost(dailyMetrics: {
+    provider: string;
+    model: string;
+    avgInputTokens: number;
+    avgOutputTokens: number;
+    interactions: number;
+  }): number {
+    const dailyCost = this.calculateCost(
+      dailyMetrics.provider,
+      dailyMetrics.model,
+      dailyMetrics.avgInputTokens * dailyMetrics.interactions,
+      dailyMetrics.avgOutputTokens * dailyMetrics.interactions
+    );
+
+    // Multiply by 30 days for monthly estimate
+    return Math.round(dailyCost * 30 * 100) / 100; // Round to cents
+  }
+
+  /**
+   * Compare costs between different providers for the same usage
+   * 
+   * @param inputTokens - Input token count
+   * @param outputTokens - Output token count
+   * @returns Cost comparison across all supported providers
+   */
+  compareProviderCosts(
+    inputTokens: number, 
+    outputTokens: number
+  ): Array<{
+    provider: string;
+    cost: number;
+    savings?: number;
+    savingsPercentage?: number;
+  }> {
+    const results = this.getSupportedProviders().map(provider => ({
+      provider,
+      cost: this.calculateCost(provider, '', inputTokens, outputTokens)
+    }));
+
+    // Sort by cost (lowest first)
+    results.sort((a, b) => a.cost - b.cost);
+
+    // Calculate savings relative to most expensive
+    const mostExpensive = results[results.length - 1];
+    
+    return results.map(result => ({
+      ...result,
+      savings: result.cost < mostExpensive.cost ? mostExpensive.cost - result.cost : undefined,
+      savingsPercentage: result.cost < mostExpensive.cost 
+        ? Math.round(((mostExpensive.cost - result.cost) / mostExpensive.cost) * 100)
+        : undefined
+    }));
+  }
+
+  /**
+   * Validate inputs for cost calculation
+   */
+  private validateCalculationInputs(
+    provider: string,
+    model: string,
+    inputTokens: number,
+    outputTokens: number
+  ): void {
+    if (typeof provider !== 'string' || provider.trim().length === 0) {
+      throw new MetricValidationError(
+        'Provider must be a non-empty string',
+        'provider',
+        provider
+      );
+    }
+
+    if (typeof model !== 'string') {
+      throw new MetricValidationError(
+        'Model must be a string',
+        'model',
+        model
+      );
+    }
+
+    if (typeof inputTokens !== 'number' || inputTokens < 0 || !Number.isInteger(inputTokens)) {
+      throw new MetricValidationError(
+        'Input tokens must be a non-negative integer',
+        'inputTokens',
+        inputTokens
+      );
+    }
+
+    if (typeof outputTokens !== 'number' || outputTokens < 0 || !Number.isInteger(outputTokens)) {
+      throw new MetricValidationError(
+        'Output tokens must be a non-negative integer',
+        'outputTokens',
+        outputTokens
+      );
+    }
+
+    // Check for reasonable upper bounds to prevent overflow
+    const MAX_TOKENS = 1000000; // 1M tokens per request seems reasonable
+    if (inputTokens > MAX_TOKENS || outputTokens > MAX_TOKENS) {
+      throw new MetricValidationError(
+        `Token count exceeds maximum allowed (${MAX_TOKENS})`,
+        inputTokens > MAX_TOKENS ? 'inputTokens' : 'outputTokens',
+        inputTokens > MAX_TOKENS ? inputTokens : outputTokens
+      );
+    }
+  }
+}

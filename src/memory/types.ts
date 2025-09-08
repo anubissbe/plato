@@ -21,6 +21,26 @@ export interface MemoryEntry {
   
   /** Optional tags for categorization */
   tags?: string[];
+  
+  /** Optional cost metadata for this memory entry */
+  costMetadata?: {
+    /** Cost incurred for this memory entry */
+    cost: number;
+    /** Input tokens used */
+    inputTokens: number;
+    /** Output tokens generated */
+    outputTokens: number;
+    /** Model used */
+    model: string;
+    /** Provider used */
+    provider: 'copilot' | 'openai' | 'claude';
+    /** Session ID this memory entry belongs to */
+    sessionId: string;
+    /** Command that generated this memory entry (if applicable) */
+    command?: string;
+    /** Duration of the interaction in milliseconds */
+    duration?: number;
+  };
 }
 
 export interface MemoryStore {
@@ -46,6 +66,30 @@ export interface SessionData {
   
   /** Session-specific memories */
   memories?: MemoryEntry[];
+  
+  /** Cost analytics for this session */
+  costAnalytics?: {
+    /** Total cost for the session */
+    totalCost: number;
+    /** Total input tokens used */
+    totalInputTokens: number;
+    /** Total output tokens generated */
+    totalOutputTokens: number;
+    /** Number of interactions in this session */
+    interactionCount: number;
+    /** Session ID */
+    sessionId: string;
+    /** Average cost per interaction */
+    avgCostPerInteraction: number;
+    /** Last time cost data was updated */
+    lastCostUpdate: string;
+    /** Cost breakdown by model */
+    modelBreakdown?: Record<string, {
+      cost: number;
+      tokens: number;
+      interactions: number;
+    }>;
+  };
 }
 
 export interface MemoryManagerOptions {

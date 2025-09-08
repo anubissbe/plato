@@ -381,4 +381,165 @@ export class MemoryManager {
 
     return sections;
   }
+
+  /**
+   * Add cost metadata to an existing memory entry
+   */
+  async updateMemoryCostMetadata(
+    memoryId: string,
+    costMetadata: MemoryEntry['costMetadata']
+  ): Promise<void> {
+    const entry = this.memoryStore.entries.find(e => e.id === memoryId);
+    if (!entry) {
+      throw new Error(`Memory entry with id ${memoryId} not found`);
+    }
+
+    entry.costMetadata = costMetadata;
+
+    // Update the file on disk
+    const filePath = path.join(this.options.memoryDir, `${entry.id}.json`);
+    await fs.writeFile(filePath, JSON.stringify(entry, null, 2), 'utf8');
+  }
+
+  /**
+   * Get total cost for all memories in a date range
+   */
+  async getTotalCostForPeriod(startDate: Date, endDate: Date): Promise<{
+    totalCost: number;
+    totalInputTokens: number;
+    totalOutputTokens: number;
+    interactionCount: number;
+    modelBreakdown: Record<string, { cost: number; tokens: number; interactions: number }>;
+  }> {
+    const startTime = startDate.getTime();
+    const endTime = endDate.getTime();
+
+    const relevantMemories = this.memoryStore.entries.filter(entry => {
+      const memoryTime = new Date(entry.timestamp).getTime();
+      return memoryTime >= startTime && memoryTime <= endTime && entry.costMetadata;
+    });
+
+    let totalCost = 0;
+    let totalInputTokens = 0;
+    let totalOutputTokens = 0;
+    let interactionCount = 0;
+    const modelBreakdown: Record<string, { cost: number; tokens: number; interactions: number }> = {};
+
+    for (const memory of relevantMemories) {
+      if (memory.costMetadata) {
+        totalCost += memory.costMetadata.cost;
+        totalInputTokens += memory.costMetadata.inputTokens;
+        totalOutputTokens += memory.costMetadata.outputTokens;
+        interactionCount++;
+
+        const model = memory.costMetadata.model;
+        if (!modelBreakdown[model]) {
+          modelBreakdown[model] = { cost: 0, tokens: 0, interactions: 0 };
+        }
+        modelBreakdown[model].cost += memory.costMetadata.cost;
+        modelBreakdown[model].tokens += memory.costMetadata.inputTokens + memory.costMetadata.outputTokens;
+        modelBreakdown[model].interactions++;
+      }
+    }
+
+    return {
+      totalCost: Math.round(totalCost * 100) / 100,
+      totalInputTokens,
+      totalOutputTokens,
+      interactionCount,
+      modelBreakdown
+    };
+  }
+
+  /**
+   * Get memories with cost metadata for a specific session
+   */
+  async getSessionMemoriesWithCost(sessionId: string): Promise<MemoryEntry[]> {
+    return this.memoryStore.entries.filter(
+      entry => entry.costMetadata?.sessionId === sessionId && entry.costMetadata
+    );
+  }
+
+  /**
+   * Update session cost analytics
+   */
+  async updateSessionCostAnalytics(
+    sessionId: string,
+    costData: {
+      totalCost: number;
+      totalInputTokens: number;
+      totalOutputTokens: number;
+      interactionCount: number;
+      modelBreakdown?: Record<string, { cost: number; tokens: number; interactions: number }>;
+    }
+  ): Promise<void> {
+    if (!this.memoryStore.session) {
+      this.memoryStore.session = {
+        startTime: new Date().toISOString(),
+        commands: [],
+        context: '',
+      };
+    }
+
+    this.memoryStore.session.costAnalytics = {
+      totalCost: Math.round(costData.totalCost * 100) / 100,
+      totalInputTokens: costData.totalInputTokens,
+      totalOutputTokens: costData.totalOutputTokens,
+      interactionCount: costData.interactionCount,
+      sessionId,
+      avgCostPerInteraction: costData.interactionCount > 0 
+        ? Math.round((costData.totalCost / costData.interactionCount) * 10000) / 10000 
+        : 0,
+      lastCostUpdate: new Date().toISOString(),
+      modelBreakdown: costData.modelBreakdown
+    };
+
+    // Auto-save the session
+    await this.saveSession(this.memoryStore.session);
+  }
+
+  /**
+   * Get session cost analytics
+   */
+  async getSessionCostAnalytics(sessionId: string): Promise<SessionData['costAnalytics'] | null> {
+    if (this.memoryStore.session?.costAnalytics?.sessionId === sessionId) {
+      return this.memoryStore.session.costAnalytics;
+    }
+
+    // Try to calculate from memory entries
+    const sessionMemories = await this.getSessionMemoriesWithCost(sessionId);
+    if (sessionMemories.length === 0) {
+      return null;
+    }
+
+    const totalCost = sessionMemories.reduce((sum, m) => sum + (m.costMetadata?.cost || 0), 0);
+    const totalInputTokens = sessionMemories.reduce((sum, m) => sum + (m.costMetadata?.inputTokens || 0), 0);
+    const totalOutputTokens = sessionMemories.reduce((sum, m) => sum + (m.costMetadata?.outputTokens || 0), 0);
+    const interactionCount = sessionMemories.length;
+
+    // Build model breakdown
+    const modelBreakdown: Record<string, { cost: number; tokens: number; interactions: number }> = {};
+    for (const memory of sessionMemories) {
+      if (memory.costMetadata) {
+        const model = memory.costMetadata.model;
+        if (!modelBreakdown[model]) {
+          modelBreakdown[model] = { cost: 0, tokens: 0, interactions: 0 };
+        }
+        modelBreakdown[model].cost += memory.costMetadata.cost;
+        modelBreakdown[model].tokens += memory.costMetadata.inputTokens + memory.costMetadata.outputTokens;
+        modelBreakdown[model].interactions++;
+      }
+    }
+
+    return {
+      totalCost: Math.round(totalCost * 100) / 100,
+      totalInputTokens,
+      totalOutputTokens,
+      interactionCount,
+      sessionId,
+      avgCostPerInteraction: interactionCount > 0 ? Math.round((totalCost / interactionCount) * 10000) / 10000 : 0,
+      lastCostUpdate: new Date().toISOString(),
+      modelBreakdown
+    };
+  }
 }
