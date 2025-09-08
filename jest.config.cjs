@@ -5,9 +5,6 @@ module.exports = {
   extensionsToTreatAsEsm: ['.ts', '.tsx'],
   moduleNameMapper: {
     '^(\\.{1,2}/.*)\\.js$': '$1',
-    // Mock execa and other ESM modules
-    '^execa$': '<rootDir>/src/__mocks__/execa.ts',
-    '^fs/promises$': '<rootDir>/src/__mocks__/fs/promises.ts',
   },
   transformIgnorePatterns: [
     'node_modules/(?!(ink-testing-library)/)',

@@ -24,6 +24,47 @@ afterAll(() => {
 process.env.NODE_ENV = 'test';
 process.env.PLATO_TEST_MODE = 'true';
 
+// Setup fs mocks with proper implementations
+import { tmpdir } from 'os';
+import path from 'path';
+
+// Mock fs/promises with actual implementations where needed
+jest.mock('fs/promises', () => ({
+  readFile: jest.fn(),
+  writeFile: jest.fn(),
+  mkdir: jest.fn(),
+  access: jest.fn(),
+  readdir: jest.fn(),
+  stat: jest.fn(),
+  unlink: jest.fn(),
+  rmdir: jest.fn(),
+  rename: jest.fn(),
+  copyFile: jest.fn(),
+  appendFile: jest.fn(),
+  realpath: jest.fn(),
+  mkdtemp: jest.fn(async (prefix: string) => {
+    const tempPath = path.join(tmpdir(), `${prefix}${Math.random().toString(36).substr(2, 9)}`);
+    // Actually create the directory for tests that chdir into it
+    const fs = require('fs');
+    fs.mkdirSync(tempPath, { recursive: true });
+    return tempPath;
+  }),
+}));
+
+// Mock execa for command execution
+jest.mock('execa', () => ({
+  execaCommand: jest.fn().mockResolvedValue({
+    stdout: '',
+    stderr: '',
+    exitCode: 0,
+  }),
+  execa: jest.fn().mockResolvedValue({
+    stdout: '',
+    stderr: '',
+    exitCode: 0,
+  }),
+}));
+
 // Mock terminal-specific functionality that doesn't work in tests
 // We check if the module exists before mocking
 try {
@@ -34,13 +75,33 @@ try {
     useApp: jest.fn(() => ({ exit: jest.fn() })),
     useInput: jest.fn(),
     useStdin: jest.fn(() => ({
-      stdin: process.stdin,
+      stdin: {
+        ...process.stdin,
+        setRawMode: jest.fn(),
+        isRaw: false,
+        write: jest.fn(),
+      },
       setRawMode: jest.fn(),
       isRawModeSupported: false,
     })),
   }));
 } catch {
   // Ink module not used in this test
+}
+
+// Prevent mouse mode terminal escape sequences in tests
+if (process.env.NODE_ENV === 'test') {
+  const originalWrite = process.stdout.write.bind(process.stdout);
+  process.stdout.write = ((chunk: any, ...args: any[]) => {
+    // Filter out mouse mode escape sequences
+    if (typeof chunk === 'string') {
+      const filtered = chunk.replace(/\x1b\[\?1000[hl]|\x1b\[\?1002[hl]|\x1b\[\?1006[hl]|\x1b\[\?1005[hl]|\x1b\[\?1015[hl]|\x1b\[\?1004[hl]/g, '');
+      if (filtered !== chunk) {
+        return true; // Silently ignore mouse escape sequences
+      }
+    }
+    return originalWrite(chunk, ...args);
+  }) as any;
 }
 
 // Global test utilities

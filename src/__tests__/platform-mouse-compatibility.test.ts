@@ -7,6 +7,17 @@ import { describe, it, expect, beforeEach, afterEach, jest } from '@jest/globals
 import { platform } from 'os';
 import { execSync } from 'child_process';
 
+// Mock filesystem functions used in the tests
+jest.mock('fs', () => ({
+  existsSync: jest.fn(() => false),
+  readFileSync: jest.fn(() => ''),
+}));
+
+// Mock child_process functions
+jest.mock('child_process', () => ({
+  execSync: jest.fn(() => ''),
+}));
+
 interface PlatformCapabilities {
   platform: string;
   isWSL: boolean;
@@ -384,6 +395,9 @@ function detectPlatformCapabilities(): PlatformCapabilities {
   if (process.env.TERM === 'dumb') {
     caps.hasMouseSupport = false;
     caps.mouseProtocol = 'none';
+  } else if (process.env.STY) {
+    // Screen session detected
+    caps.mouseProtocol = 'xterm';
   } else if (process.env.TERM?.includes('xterm')) {
     caps.mouseProtocol = 'sgr';
   } else if (process.env.TERM?.includes('screen')) {
@@ -419,12 +433,22 @@ function parseMouseEvent(sequence: string, environment: string): any {
   const sgrMatch = sequence.match(/\x1b\[<(\d+);(\d+);(\d+)([Mm])/);
   if (sgrMatch) {
     const [, button, x, y, release] = sgrMatch;
+    const buttonCode = parseInt(button);
+    
+    let eventType = 'mousedown';
+    if (release === 'm') {
+      eventType = 'mouseup';
+    } else if (buttonCode === 64 || buttonCode === 65) {
+      eventType = 'wheel';
+    } else if (buttonCode & 32) {
+      eventType = 'mousemove';
+    }
+    
     return {
-      type: release === 'm' ? 'mouseup' : 
-            parseInt(button) & 32 ? 'mousemove' : 'mousedown',
+      type: eventType,
       x: parseInt(x),
       y: parseInt(y),
-      button: getButtonFromCode(parseInt(button))
+      button: getButtonFromCode(buttonCode)
     };
   }
 
@@ -447,8 +471,9 @@ function parseMouseEvent(sequence: string, environment: string): any {
 }
 
 function getButtonFromCode(code: number): string {
-  if (code & 64) return 'wheelup';
-  if (code & 65) return 'wheeldown';
+  // Check for wheel events (scroll)
+  if (code === 64) return 'wheelup';
+  if (code === 65) return 'wheeldown';
   
   const buttonCode = code & 3;
   switch (buttonCode) {
