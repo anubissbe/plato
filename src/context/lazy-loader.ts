@@ -96,10 +96,14 @@ export class LoadingQueue {
       
       while (files.size > 0 && batch.length < batchSize) {
         const filePath = files.values().next().value;
-        files.delete(filePath);
-        this.pending.delete(filePath);
-        this.priorities.delete(filePath);
-        batch.push(filePath);
+        if (filePath) {
+          files.delete(filePath);
+          this.pending.delete(filePath);
+          this.priorities.delete(filePath);
+          batch.push(filePath);
+        } else {
+          break;
+        }
       }
       
       if (files.size === 0) {

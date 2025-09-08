@@ -154,12 +154,12 @@ export class FocusManager {
    */
   private setupComponentRegistryListener(): void {
     // Listen for component changes to update tab order cache
-    this.componentRegistry.onChange((changeEvent) => {
-      if (changeEvent.type === 'register' || changeEvent.type === 'unregister' || changeEvent.type === 'update') {
+    this.componentRegistry.addChangeListener((changeEvent) => {
+      if (changeEvent.type === 'added' || changeEvent.type === 'removed' || changeEvent.type === 'updated') {
         this.invalidateTabOrderCache();
         
         // If currently focused component was removed, move focus
-        if (changeEvent.type === 'unregister' && this.currentFocus?.id === changeEvent.componentId) {
+        if (changeEvent.type === 'removed' && this.currentFocus?.id === changeEvent.componentId) {
           this.moveFocus('forward');
         }
       }
@@ -533,7 +533,7 @@ export class FocusManager {
    * Get components that can receive focus
    */
   private getFocusableComponents(): ClickableComponent[] {
-    const allComponents = this.componentRegistry.getAll();
+    const allComponents = this.componentRegistry.getAllComponents();
     
     return allComponents.filter(component => {
       // Skip disabled components if configured
@@ -711,7 +711,7 @@ export class FocusManager {
       const component = this.focusRestoreStack.pop()!;
       
       // Check if component still exists and is focusable
-      const current = this.componentRegistry.getById(component.id);
+      const current = this.componentRegistry.get(component.id);
       if (current && current.isEnabled && current.isVisible && current.accessibility.tabIndex >= 0) {
         await this.setFocus(current);
         return true;

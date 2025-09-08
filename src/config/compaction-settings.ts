@@ -117,7 +117,7 @@ export class CompactionSettingsManager {
       await this.saveSettings();
       return { success: true, errors: [] };
     } catch (error) {
-      return { success: false, errors: [`Failed to save settings: ${error.message}`] };
+      return { success: false, errors: [`Failed to save settings: ${error instanceof Error ? error.message : String(error)}`] };
     }
   }
 
@@ -172,7 +172,7 @@ export class CompactionSettingsManager {
       const data = JSON.stringify(this.settings, null, 2);
       await fs.writeFile(this.settingsFile, data, 'utf8');
     } catch (error) {
-      throw new Error(`Failed to save compaction settings: ${error.message}`);
+      throw new Error(`Failed to save compaction settings: ${error instanceof Error ? error.message : String(error)}`);
     }
   }
 
@@ -377,7 +377,7 @@ export class CompactionSettingsManager {
       const imported = JSON.parse(jsonString);
       return await this.updateSettings(imported);
     } catch (error) {
-      return { success: false, errors: [`Invalid JSON: ${error.message}`] };
+      return { success: false, errors: [`Invalid JSON: ${error instanceof Error ? error.message : String(error)}`] };
     }
   }
 

@@ -134,7 +134,7 @@ export class UserFeedbackCollector {
       const data = JSON.stringify(this.feedback, null, 2);
       await fs.writeFile(this.feedbackFile, data, 'utf8');
     } catch (error) {
-      console.warn(`Failed to save feedback: ${error.message}`);
+      console.warn(`Failed to save feedback: ${error instanceof Error ? error.message : String(error)}`);
     }
   }
 
@@ -286,14 +286,14 @@ export class UserFeedbackCollector {
     
     if (preferences.length > 0) {
       // Most valued features
-      const mostValued = preferences.map(p => p.mostValuedFeature).filter(Boolean);
+      const mostValued = preferences.map(p => p?.mostValuedFeature).filter(Boolean);
       const valuedCounts = this.countFrequency(mostValued);
       if (valuedCounts.length > 0) {
         preferredSettings.mostValuedFeature = valuedCounts[0].item;
       }
       
       // Preferred compression levels
-      const compLevels = preferences.map(p => p.preferredCompressionLevel).filter(Boolean);
+      const compLevels = preferences.map(p => p?.preferredCompressionLevel).filter(Boolean);
       const levelCounts = this.countFrequency(compLevels);
       if (levelCounts.length > 0) {
         preferredSettings.preferredCompressionLevel = levelCounts[0].item;

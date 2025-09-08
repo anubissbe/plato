@@ -4,8 +4,8 @@ import { describe, test, expect, beforeEach, afterEach, jest } from '@jest/globa
 
 // Mock dependencies
 jest.mock('../config', () => ({
-  loadConfig: jest.fn().mockResolvedValue({}),
-  setConfigValue: jest.fn(),
+  loadConfig: jest.fn().mockResolvedValue({}) as any,
+  setConfigValue: jest.fn().mockResolvedValue(undefined) as any,
 }));
 
 describe('Command Palette Tests', () => {
@@ -143,7 +143,7 @@ describe('Command Palette Tests', () => {
       mockCommandPalette.setQuery(query);
       mockCommandPalette.query = query;
       
-      const filtered = mockCommands.filter(cmd => 
+      const filtered = mockCommands.filter((cmd: any) => 
         cmd.name.toLowerCase().includes(query.toLowerCase())
       );
       mockCommandPalette.filteredCommands = filtered;
@@ -157,7 +157,7 @@ describe('Command Palette Tests', () => {
       mockCommandPalette.setQuery(query);
       mockCommandPalette.query = query;
       
-      const filtered = mockCommands.filter(cmd => 
+      const filtered = mockCommands.filter((cmd: any) => 
         cmd.description.toLowerCase().includes(query.toLowerCase())
       );
       mockCommandPalette.filteredCommands = filtered;
@@ -171,8 +171,8 @@ describe('Command Palette Tests', () => {
       mockCommandPalette.setQuery(query);
       mockCommandPalette.query = query;
       
-      const filtered = mockCommands.filter(cmd => 
-        cmd.keywords.some(keyword => 
+      const filtered = mockCommands.filter((cmd: any) => 
+        cmd.keywords.some((keyword: string) => 
           keyword.toLowerCase().includes(query.toLowerCase())
         )
       );
@@ -186,7 +186,7 @@ describe('Command Palette Tests', () => {
       const queries = ['HELP', 'Help', 'hElP'];
       
       queries.forEach(query => {
-        const filtered = mockCommands.filter(cmd => 
+        const filtered = mockCommands.filter((cmd: any) => 
           cmd.name.toLowerCase().includes(query.toLowerCase())
         );
         
@@ -203,10 +203,10 @@ describe('Command Palette Tests', () => {
         return regex.test(text);
       };
       
-      const filtered = mockCommands.filter(cmd => 
+      const filtered = mockCommands.filter((cmd: any) => 
         fuzzyMatch(cmd.name, query) || 
         fuzzyMatch(cmd.description, query) ||
-        cmd.keywords.some(keyword => fuzzyMatch(keyword, query))
+        cmd.keywords.some((keyword: string) => fuzzyMatch(keyword, query))
       );
       
       expect(filtered.length).toBeGreaterThan(0);
@@ -217,10 +217,10 @@ describe('Command Palette Tests', () => {
       mockCommandPalette.setQuery(query);
       mockCommandPalette.query = query;
       
-      const filtered = mockCommands.filter(cmd => 
+      const filtered = mockCommands.filter((cmd: any) => 
         cmd.name.toLowerCase().includes(query.toLowerCase()) ||
         cmd.description.toLowerCase().includes(query.toLowerCase()) ||
-        cmd.keywords.some(keyword => 
+        cmd.keywords.some((keyword: string) => 
           keyword.toLowerCase().includes(query.toLowerCase())
         )
       );
@@ -285,7 +285,7 @@ describe('Command Palette Tests', () => {
       
       // Filter to fewer results
       const query = 'help';
-      const filtered = mockCommands.filter(cmd => 
+      const filtered = mockCommands.filter((cmd: any) => 
         cmd.name.toLowerCase().includes(query.toLowerCase())
       );
       mockCommandPalette.filteredCommands = filtered;
@@ -359,7 +359,7 @@ describe('Command Palette Tests', () => {
           errorCommand.handler();
         } catch (e) {
           // Error should be caught and handled
-          expect(e.message).toBe('Test error');
+          expect((e as Error).message).toBe('Test error');
         }
       }).not.toThrow();
     });
@@ -453,7 +453,7 @@ describe('Command Palette Tests', () => {
         const startTime = Date.now();
         
         mockCommandPalette.setQuery(query);
-        const filtered = mockCommands.filter(cmd => 
+        const filtered = mockCommands.filter((cmd: any) => 
           cmd.name.toLowerCase().includes(query.toLowerCase())
         );
         mockCommandPalette.filteredCommands = filtered;
@@ -476,7 +476,7 @@ describe('Command Palette Tests', () => {
       complexQueries.forEach(query => {
         const startTime = Date.now();
         
-        const filtered = mockCommands.filter(cmd => {
+        const filtered = mockCommands.filter((cmd: any) => {
           const searchText = `${cmd.name} ${cmd.description} ${cmd.keywords.join(' ')}`.toLowerCase();
           return query.toLowerCase().split(' ').every(term => 
             searchText.includes(term)

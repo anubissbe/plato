@@ -244,9 +244,9 @@ function createMouseEvent(
 
 describe('Interactive UI Components System', () => {
   let interactionSystem: MockComponentInteractionSystem;
-  let clickHandler: jest.Mock;
-  let hoverHandler: jest.Mock;
-  let leaveHandler: jest.Mock;
+  let clickHandler: jest.MockedFunction<(event: MouseEvent) => void | Promise<void>>;
+  let hoverHandler: jest.MockedFunction<(event: MouseEvent) => void | Promise<void>>;
+  let leaveHandler: jest.MockedFunction<() => void | Promise<void>>;
 
   beforeEach(() => {
     interactionSystem = new MockComponentInteractionSystem();

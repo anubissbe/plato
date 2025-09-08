@@ -220,13 +220,13 @@ export class ClipboardValidator {
       }
 
       // Verify content matches
-      const contentMatches = pasteResult.text === testCase.text;
+      const contentMatches = pasteResult.data === testCase.text;
       
       return {
         platform: platformInfo.os,
         test: testCase.name,
         success: contentMatches,
-        error: contentMatches ? undefined : `Content mismatch: expected "${testCase.text}", got "${pasteResult.text}"`,
+        error: contentMatches ? undefined : `Content mismatch: expected "${testCase.text}", got "${pasteResult.data}"`,
         executionTime: Date.now() - startTime,
         details: {
           textLength: testCase.text.length,

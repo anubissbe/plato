@@ -380,13 +380,13 @@ export class DragSelectionManager {
     }
 
     switch (event.type) {
-      case 'down':
+      case 'click':
         await this.handleMouseDown(event);
         break;
       case 'move':
         await this.handleMouseMove(event);
         break;
-      case 'up':
+      case 'drag_end':
         await this.handleMouseUp(event);
         break;
       case 'drag':

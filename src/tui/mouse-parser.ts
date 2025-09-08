@@ -303,20 +303,21 @@ export class MouseProtocolParser {
       const utf8Match = remaining.match(/\x1b\[M[\s\S]{3}/);
       const urxvtMatch = remaining.match(/\x1b\[\d+;\d+;\d+M/);
 
-      let match = null;
+      let match: RegExpMatchArray | null = null;
       let matchLength = 0;
 
       // Find the earliest match
-      if (sgrMatch && (!match || sgrMatch.index! < match.index!)) {
-        match = sgrMatch;
-        matchLength = match[0].length;
-      }
-      if (utf8Match && (!match || utf8Match.index! < match.index!)) {
-        match = utf8Match;
-        matchLength = match[0].length;
-      }
-      if (urxvtMatch && (!match || urxvtMatch.index! < match.index!)) {
-        match = urxvtMatch;
+      const candidates = [
+        { match: sgrMatch, type: 'sgr' },
+        { match: utf8Match, type: 'utf8' },
+        { match: urxvtMatch, type: 'urxvt' }
+      ].filter(c => c.match && c.match.index !== undefined);
+
+      if (candidates.length > 0) {
+        const earliest = candidates.reduce((prev, curr) => 
+          (curr.match!.index! < prev.match!.index!) ? curr : prev
+        );
+        match = earliest.match!;
         matchLength = match[0].length;
       }
 

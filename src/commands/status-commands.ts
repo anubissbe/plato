@@ -3,7 +3,11 @@
  * Commands for configuring and managing the status display system
  */
 
-import type { CommandHandler } from '../tui/keyboard-handler.js';
+// Define CommandHandler interface to match the actual usage pattern
+interface CommandHandler {
+  description: string;
+  execute: (args?: string[]) => Promise<{ success: boolean; message: string }> | { success: boolean; message: string };
+}
 import {
   loadStatusConfig,
   saveStatusConfig,
@@ -16,6 +20,7 @@ import {
   exportStatusConfig,
   importStatusConfig
 } from '../tui/status-config.js';
+import type { StatusMetrics } from '../tui/status-manager.js';
 
 /**
  * Register status-related slash commands
@@ -110,9 +115,9 @@ export function registerStatusCommands(handlers: Map<string, CommandHandler>): v
   // Apply presets
   handlers.set('/status preset', {
     description: 'Apply a status display preset (minimal|detailed|performance|developer)',
-    execute: async (args: string[]) => {
-      const preset = args[0];
-      if (!['minimal', 'detailed', 'performance', 'developer'].includes(preset)) {
+    execute: async (args?: string[]) => {
+      const preset = args?.[0];
+      if (!preset || !['minimal', 'detailed', 'performance', 'developer'].includes(preset)) {
         return {
           success: false,
           message: 'Invalid preset. Choose: minimal, detailed, performance, or developer'
@@ -130,15 +135,15 @@ export function registerStatusCommands(handlers: Map<string, CommandHandler>): v
   // Configure visible metrics
   handlers.set('/status metrics', {
     description: 'Configure visible metrics',
-    execute: async (args: string[]) => {
-      if (args.length === 0) {
+    execute: async (args?: string[]) => {
+      if (!args || args.length === 0) {
         const config = await loadStatusConfig();
         const available = getAvailableMetrics();
         const visible = config.visibleMetrics;
         
         const message = [
           'Available metrics:',
-          ...available.map(m => `  ${visible.includes(m) ? '✓' : ' '} ${m}`),
+          ...available.map(m => `  ${visible.includes(m as keyof StatusMetrics) ? '✓' : ' '} ${m}`),
           '',
           'Use: /status metrics add <metric> or /status metrics remove <metric>'
         ].join('\n');
@@ -150,7 +155,7 @@ export function registerStatusCommands(handlers: Map<string, CommandHandler>): v
       const metric = args[1];
       
       if (action === 'add' && metric) {
-        await toggleMetric(metric);
+        await toggleMetric(metric as keyof StatusMetrics);
         return {
           success: true,
           message: `Added ${metric} to visible metrics`
@@ -158,7 +163,7 @@ export function registerStatusCommands(handlers: Map<string, CommandHandler>): v
       }
       
       if (action === 'remove' && metric) {
-        await toggleMetric(metric);
+        await toggleMetric(metric as keyof StatusMetrics);
         return {
           success: true,
           message: `Removed ${metric} from visible metrics`
@@ -175,8 +180,8 @@ export function registerStatusCommands(handlers: Map<string, CommandHandler>): v
   // Set update interval
   handlers.set('/status interval', {
     description: 'Set status update interval in milliseconds',
-    execute: async (args: string[]) => {
-      const interval = parseInt(args[0], 10);
+    execute: async (args?: string[]) => {
+      const interval = parseInt(args?.[0] || '0', 10);
       if (isNaN(interval) || interval < 100 || interval > 5000) {
         return {
           success: false,
@@ -198,8 +203,8 @@ export function registerStatusCommands(handlers: Map<string, CommandHandler>): v
   // Set progress bar width
   handlers.set('/status width', {
     description: 'Set progress bar width',
-    execute: async (args: string[]) => {
-      const width = parseInt(args[0], 10);
+    execute: async (args?: string[]) => {
+      const width = parseInt(args?.[0] || '0', 10);
       if (isNaN(width) || width < 10 || width > 100) {
         return {
           success: false,
@@ -233,8 +238,8 @@ export function registerStatusCommands(handlers: Map<string, CommandHandler>): v
   // Import configuration
   handlers.set('/status import', {
     description: 'Import status configuration from JSON',
-    execute: async (args: string[]) => {
-      const json = args.join(' ');
+    execute: async (args?: string[]) => {
+      const json = args?.join(' ') || '';
       if (!json) {
         return {
           success: false,

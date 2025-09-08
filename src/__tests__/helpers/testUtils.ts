@@ -64,9 +64,9 @@ export function waitFor(
  * Capture console output during test execution
  */
 export class ConsoleCapture {
-  private originalLog: typeof console.log;
-  private originalError: typeof console.error;
-  private originalWarn: typeof console.warn;
+  private originalLog!: typeof console.log;
+  private originalError!: typeof console.error;
+  private originalWarn!: typeof console.warn;
   private captured: { type: string; args: any[] }[] = [];
 
   start() {

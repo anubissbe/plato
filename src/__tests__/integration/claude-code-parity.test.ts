@@ -60,8 +60,7 @@ describe('Claude Code Parity Validation Tests', () => {
       // Mock authentication state
       mockGetAuthInfo.mockResolvedValue({
         loggedIn: true,
-        user: { login: "testuser@example.com" },
-        scopes: ['copilot']
+        user: { login: "testuser@example.com" }
       });
 
       const statusOutput = await simulateStatusCommand();
@@ -76,7 +75,6 @@ describe('Claude Code Parity Validation Tests', () => {
       // Test not logged in state
       mockGetAuthInfo.mockResolvedValue({
         isLoggedIn: false,
-        user: null,
         scopes: []
       });
 
@@ -117,7 +115,6 @@ describe('Claude Code Parity Validation Tests', () => {
       // Test logout when not logged in
       mockGetAuthInfo.mockResolvedValue({
         isLoggedIn: false,
-        user: null,
         scopes: []
       });
 
@@ -368,12 +365,7 @@ Created simple.js with a greet function.`
       orchestrator.addMessage({ role: 'user', content: 'Test message' });
       orchestrator.addMessage({ role: 'assistant', content: 'Test response' });
       
-      orchestrator.updateTokenMetrics({
-        inputTokens: 10,
-        outputTokens: 15,
-        totalTokens: 25,
-        cost: 0.001
-      });
+      orchestrator.updateTokenMetrics(10, 15);
 
       await orchestrator.saveSession();
 
@@ -474,8 +466,7 @@ Created simple.js with a greet function.`
       // 1. Login
       mockGetAuthInfo.mockResolvedValue({
         loggedIn: true,
-        user: { login: "testuser@example.com" },
-        scopes: ['copilot']
+        user: { login: "testuser@example.com" }
       });
 
       const loginOutput = await simulateLoginCommand();

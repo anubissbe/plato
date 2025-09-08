@@ -3,7 +3,7 @@ import { Box, Text, useInput, useApp } from 'ink';
 import { FileRelevanceScorer } from '../context/relevance-scorer.js';
 import { ContentSampler } from '../context/content-sampler.js';
 import { SemanticIndex } from '../context/semantic-index.js';
-import type { RelevanceScore } from '../context/relevance-scorer.js';
+import type { RelevanceScore } from '../context/types.js';
 
 export interface ContextFile {
   path: string;

@@ -8,6 +8,7 @@ import { FileIndex } from './types.js';
 import * as fs from 'fs/promises';
 import * as path from 'path';
 import * as crypto from 'crypto';
+import { FSWatcher, watch } from 'fs';
 
 export interface FileChangeInfo {
   path: string;
@@ -37,7 +38,7 @@ export interface IncrementalIndexOptions {
  * File system watcher for detecting changes
  */
 export class FileSystemWatcher {
-  private watchers: Map<string, fs.FSWatcher> = new Map();
+  private watchers: Map<string, FSWatcher> = new Map();
   private changeBuffer: Map<string, FileChangeInfo> = new Map();
   private debounceTimeouts: Map<string, NodeJS.Timeout> = new Map();
   private readonly debounceMs: number = 100;
@@ -53,7 +54,7 @@ export class FileSystemWatcher {
     ignorePatterns: string[] = ['**/node_modules/**', '**/dist/**', '**/.git/**']
   ): Promise<void> {
     try {
-      const watcher = fs.watch(directory, { recursive: true }, (eventType, filename) => {
+      const watcher = watch(directory, { recursive: true }, (eventType, filename) => {
         if (!filename) return;
         
         const fullPath = path.join(directory, filename);
@@ -233,7 +234,7 @@ export class ChangeDetector {
     return changes;
   }
 
-  private static async findFiles(directory: string, patterns: string[]): Promise<string[]> {
+  public static async findFiles(directory: string, patterns: string[]): Promise<string[]> {
     const files: string[] = [];
     
     const scan = async (dir: string): Promise<void> => {
@@ -402,7 +403,8 @@ export class IncrementalIndexer {
   }
 
   private async queueUpdate<T>(updateFn: () => Promise<T>): Promise<T> {
-    this.updateQueue = this.updateQueue.then(async () => {
+    // Create a new promise that chains with the current queue
+    const resultPromise = this.updateQueue.then(async () => {
       this.updateInProgress = true;
       try {
         return await updateFn();
@@ -411,7 +413,10 @@ export class IncrementalIndexer {
       }
     });
     
-    return this.updateQueue as Promise<T>;
+    // Update the queue to continue chaining (but ignore the result)
+    this.updateQueue = resultPromise.then(() => {});
+    
+    return resultPromise;
   }
 
   private async processBatch(
@@ -439,7 +444,7 @@ export class IncrementalIndexer {
             break;
         }
       } catch (error) {
-        result.errors.push(`Error processing ${change.path}: ${error.message}`);
+        result.errors.push(`Error processing ${change.path}: ${error instanceof Error ? error.message : String(error)}`);
       }
     };
 

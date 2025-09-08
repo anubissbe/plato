@@ -246,17 +246,17 @@ export const useOrchestratorIntegration = (statusManager: StatusManager) => {
 
 // Keyboard handler integration
 export const StatusKeyboardHandlers = {
-  'ctrl+s': (statusManager: StatusManager, updateConfig: (config: Partial<StatusConfig>) => void) => {
+  'ctrl+s': (statusManager: StatusManager, updateConfig: (config: Partial<StatusConfig>) => void, currentConfig: StatusConfig) => {
     // Toggle status display
-    updateConfig(prev => ({ enabled: !prev.enabled }));
+    updateConfig({ enabled: !currentConfig.enabled });
   },
-  'ctrl+shift+s': (statusManager: StatusManager, updateConfig: (config: Partial<StatusConfig>) => void) => {
+  'ctrl+shift+s': (statusManager: StatusManager, updateConfig: (config: Partial<StatusConfig>) => void, currentConfig: StatusConfig) => {
     // Toggle compact mode
-    updateConfig(prev => ({ compactMode: !prev.compactMode }));
+    updateConfig({ compactMode: !currentConfig.compactMode });
   },
-  'ctrl+shift+p': (statusManager: StatusManager, updateConfig: (config: Partial<StatusConfig>) => void) => {
+  'ctrl+shift+p': (statusManager: StatusManager, updateConfig: (config: Partial<StatusConfig>) => void, currentConfig: StatusConfig) => {
     // Toggle progress bar
-    updateConfig(prev => ({ showProgressBar: !prev.showProgressBar }));
+    updateConfig({ showProgressBar: !currentConfig.showProgressBar });
   },
   'ctrl+shift+m': (statusManager: StatusManager) => {
     // Clear metrics
@@ -264,23 +264,7 @@ export const StatusKeyboardHandlers = {
   }
 };
 
-// Export configuration helpers
-export const loadStatusConfig = (): Partial<StatusConfig> => {
-  try {
-    const stored = localStorage.getItem('plato-status-config');
-    return stored ? JSON.parse(stored) : {};
-  } catch {
-    return {};
-  }
-};
-
-export const saveStatusConfig = (config: StatusConfig): void => {
-  try {
-    localStorage.setItem('plato-status-config', JSON.stringify(config));
-  } catch {
-    // Ignore errors
-  }
-};
+// Configuration helpers are imported from status-config.ts
 
 // Helper component for terminal size detection
 export const useTerminalSize = () => {
