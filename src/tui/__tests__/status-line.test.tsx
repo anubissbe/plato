@@ -25,7 +25,15 @@ describe('StatusLine Component', () => {
     toolCallHistory: [],
     lastError: null,
     averageResponseTime: 1500,
-    indeterminateProgress: false
+    indeterminateProgress: false,
+    currentCost: 0.001,
+    sessionCost: 0.045,
+    todayCost: 0.123,
+    costPerToken: 0.000006,
+    projectedCost: 0.050,
+    costThreshold: 1.00,
+    model: 'gpt-3.5-turbo',
+    provider: 'copilot'
   };
 
   describe('Rendering', () => {
@@ -324,6 +332,514 @@ describe('StatusLine Component', () => {
       
       // Click handling would be tested with interaction
       expect(lastFrame()).toBeDefined();
+    });
+  });
+
+  describe('Cost Analytics Display', () => {
+    describe('Cost Formatting', () => {
+      it('should display current cost with proper formatting', () => {
+        const costMetrics = {
+          ...defaultMetrics,
+          currentCost: 0.001234
+        };
+        
+        const { lastFrame } = render(
+          <StatusLine 
+            metrics={costMetrics}
+            visibleMetrics={['currentCost']}
+          />
+        );
+        
+        expect(lastFrame()).toContain('$0.0012');
+      });
+
+      it('should format session cost for larger amounts', () => {
+        const costMetrics = {
+          ...defaultMetrics,
+          sessionCost: 1.234567
+        };
+        
+        const { lastFrame } = render(
+          <StatusLine 
+            metrics={costMetrics}
+            visibleMetrics={['sessionCost']}
+          />
+        );
+        
+        expect(lastFrame()).toContain('$1.23');
+      });
+
+      it('should handle very small costs with scientific notation fallback', () => {
+        const costMetrics = {
+          ...defaultMetrics,
+          currentCost: 0.0000012
+        };
+        
+        const { lastFrame } = render(
+          <StatusLine 
+            metrics={costMetrics}
+            visibleMetrics={['currentCost']}
+          />
+        );
+        
+        expect(lastFrame()).toContain('$0.000001');
+      });
+
+      it('should format today total cost appropriately', () => {
+        const costMetrics = {
+          ...defaultMetrics,
+          todayCost: 15.789
+        };
+        
+        const { lastFrame } = render(
+          <StatusLine 
+            metrics={costMetrics}
+            visibleMetrics={['todayCost']}
+          />
+        );
+        
+        expect(lastFrame()).toContain('$15.79');
+      });
+    });
+
+    describe('Cost Color Coding', () => {
+      it('should use green for low costs (under 25% of threshold)', () => {
+        const costMetrics = {
+          ...defaultMetrics,
+          currentCost: 0.20,
+          costThreshold: 1.00
+        };
+        
+        const { lastFrame } = render(
+          <StatusLine 
+            metrics={costMetrics}
+            visibleMetrics={['currentCost']}
+          />
+        );
+        
+        // Green for costs under 25% of threshold
+        expect(lastFrame()).toContain('$0.20');
+      });
+
+      it('should use yellow for medium costs (25-75% of threshold)', () => {
+        const costMetrics = {
+          ...defaultMetrics,
+          sessionCost: 0.50,
+          costThreshold: 1.00
+        };
+        
+        const { lastFrame } = render(
+          <StatusLine 
+            metrics={costMetrics}
+            visibleMetrics={['sessionCost']}
+          />
+        );
+        
+        // Yellow for costs 25-75% of threshold
+        expect(lastFrame()).toContain('$0.50');
+      });
+
+      it('should use red for high costs (over 75% of threshold)', () => {
+        const costMetrics = {
+          ...defaultMetrics,
+          sessionCost: 0.80,
+          costThreshold: 1.00
+        };
+        
+        const { lastFrame } = render(
+          <StatusLine 
+            metrics={costMetrics}
+            visibleMetrics={['sessionCost']}
+          />
+        );
+        
+        // Red for costs over 75% of threshold
+        expect(lastFrame()).toContain('$0.80');
+      });
+
+      it('should use bright red for costs exceeding threshold', () => {
+        const costMetrics = {
+          ...defaultMetrics,
+          todayCost: 1.25,
+          costThreshold: 1.00
+        };
+        
+        const { lastFrame } = render(
+          <StatusLine 
+            metrics={costMetrics}
+            visibleMetrics={['todayCost']}
+          />
+        );
+        
+        // Bright red for costs exceeding threshold
+        expect(lastFrame()).toContain('$1.25');
+      });
+    });
+
+    describe('Cost Labels and Compact Mode', () => {
+      it('should show full labels in normal mode', () => {
+        const { lastFrame } = render(
+          <StatusLine 
+            metrics={defaultMetrics}
+            visibleMetrics={['currentCost', 'sessionCost', 'todayCost']}
+            compact={false}
+          />
+        );
+        
+        expect(lastFrame()).toContain('Cost:');
+        expect(lastFrame()).toContain('Session:');
+        expect(lastFrame()).toContain('Today:');
+      });
+
+      it('should show abbreviated labels in compact mode', () => {
+        const { lastFrame } = render(
+          <StatusLine 
+            metrics={defaultMetrics}
+            visibleMetrics={['currentCost', 'sessionCost', 'todayCost']}
+            compact={true}
+          />
+        );
+        
+        expect(lastFrame()).toContain('C:');
+        expect(lastFrame()).toContain('S:');
+        expect(lastFrame()).toContain('T:');
+      });
+
+      it('should show cost symbols in ultra-compact mode', () => {
+        const { lastFrame } = render(
+          <StatusLine 
+            metrics={defaultMetrics}
+            visibleMetrics={['currentCost', 'sessionCost']}
+            compact={true}
+            separator=" "
+          />
+        );
+        
+        // Ultra-compact should use $ symbol with minimal spacing
+        expect(lastFrame()).toMatch(/\$[\d.]+/);
+      });
+    });
+
+    describe('Cost Visibility Controls', () => {
+      it('should hide cost metrics when not in visibleMetrics', () => {
+        const { lastFrame } = render(
+          <StatusLine 
+            metrics={defaultMetrics}
+            visibleMetrics={['inputTokens', 'outputTokens']}
+          />
+        );
+        
+        expect(lastFrame()).not.toContain('$');
+        expect(lastFrame()).not.toContain('Cost:');
+      });
+
+      it('should show only specified cost metrics', () => {
+        const { lastFrame } = render(
+          <StatusLine 
+            metrics={defaultMetrics}
+            visibleMetrics={['sessionCost']}
+          />
+        );
+        
+        expect(lastFrame()).toContain('$0.045'); // sessionCost
+        expect(lastFrame()).not.toContain('$0.001'); // currentCost should be hidden
+        expect(lastFrame()).not.toContain('$0.123'); // todayCost should be hidden
+      });
+
+      it('should allow cost metrics to be toggled dynamically', () => {
+        const { lastFrame, rerender } = render(
+          <StatusLine 
+            metrics={defaultMetrics}
+            visibleMetrics={['totalTokens']}
+          />
+        );
+        
+        expect(lastFrame()).not.toContain('$');
+        
+        rerender(
+          <StatusLine 
+            metrics={defaultMetrics}
+            visibleMetrics={['totalTokens', 'currentCost']}
+          />
+        );
+        
+        expect(lastFrame()).toContain('$0.001');
+      });
+    });
+
+    describe('Provider and Model Display', () => {
+      it('should show provider and model information when available', () => {
+        const { lastFrame } = render(
+          <StatusLine 
+            metrics={defaultMetrics}
+            visibleMetrics={['model', 'provider', 'currentCost']}
+            compact={false}
+          />
+        );
+        
+        expect(lastFrame()).toContain('gpt-3.5-turbo');
+        expect(lastFrame()).toContain('copilot');
+      });
+
+      it('should abbreviate provider/model in compact mode', () => {
+        const longMetrics = {
+          ...defaultMetrics,
+          model: 'gpt-4-32k-context-extended',
+          provider: 'azure-openai'
+        };
+        
+        const { lastFrame } = render(
+          <StatusLine 
+            metrics={longMetrics}
+            visibleMetrics={['model', 'provider']}
+            compact={true}
+          />
+        );
+        
+        // Should truncate long names in compact mode
+        expect(lastFrame()).toMatch(/(gpt-4|azure)/);
+      });
+
+      it('should handle missing provider/model gracefully', () => {
+        const incompleteMetrics = {
+          ...defaultMetrics,
+          model: undefined,
+          provider: undefined
+        };
+        
+        const { lastFrame } = render(
+          <StatusLine 
+            metrics={incompleteMetrics}
+            visibleMetrics={['model', 'provider', 'currentCost']}
+          />
+        );
+        
+        expect(lastFrame()).toContain('$0.001');
+        // Should not crash with undefined model/provider
+      });
+    });
+
+    describe('Cost Projections and Warnings', () => {
+      it('should show projected cost when available', () => {
+        const projectionMetrics = {
+          ...defaultMetrics,
+          projectedCost: 0.075
+        };
+        
+        const { lastFrame } = render(
+          <StatusLine 
+            metrics={projectionMetrics}
+            visibleMetrics={['projectedCost']}
+          />
+        );
+        
+        expect(lastFrame()).toContain('$0.075');
+        expect(lastFrame()).toContain('Proj:');
+      });
+
+      it('should show warning icon for costs approaching threshold', () => {
+        const warningMetrics = {
+          ...defaultMetrics,
+          sessionCost: 0.85,
+          costThreshold: 1.00
+        };
+        
+        const { lastFrame } = render(
+          <StatusLine 
+            metrics={warningMetrics}
+            visibleMetrics={['sessionCost', 'costThreshold']}
+          />
+        );
+        
+        // Should include warning indicator (⚠ or similar)
+        expect(lastFrame()).toMatch(/[⚠️🚨]/);
+      });
+
+      it('should show cost per token rate', () => {
+        const { lastFrame } = render(
+          <StatusLine 
+            metrics={defaultMetrics}
+            visibleMetrics={['costPerToken']}
+          />
+        );
+        
+        expect(lastFrame()).toContain('$0.000006');
+        expect(lastFrame()).toContain('/tok');
+      });
+    });
+
+    describe('Custom Cost Formatters', () => {
+      it('should support custom cost formatting', () => {
+        const customFormatters = {
+          currentCost: (cost: number) => `${(cost * 100).toFixed(2)}¢`,
+          sessionCost: (cost: number) => `$${cost.toFixed(3)}`
+        };
+        
+        const { lastFrame } = render(
+          <StatusLine 
+            metrics={defaultMetrics}
+            visibleMetrics={['currentCost', 'sessionCost']}
+            formatters={customFormatters}
+          />
+        );
+        
+        expect(lastFrame()).toContain('0.10¢'); // currentCost as cents
+        expect(lastFrame()).toContain('$0.045'); // sessionCost with 3 decimals
+      });
+
+      it('should handle zero costs appropriately', () => {
+        const zeroMetrics = {
+          ...defaultMetrics,
+          currentCost: 0,
+          sessionCost: 0,
+          todayCost: 0
+        };
+        
+        const { lastFrame } = render(
+          <StatusLine 
+            metrics={zeroMetrics}
+            visibleMetrics={['currentCost', 'sessionCost', 'todayCost']}
+          />
+        );
+        
+        expect(lastFrame()).toContain('$0.00');
+      });
+    });
+
+    describe('Real-time Cost Updates', () => {
+      it('should reflect cost changes immediately', () => {
+        const { lastFrame, rerender } = render(
+          <StatusLine 
+            metrics={defaultMetrics}
+            visibleMetrics={['currentCost']}
+          />
+        );
+        
+        expect(lastFrame()).toContain('$0.001');
+        
+        const updatedMetrics = {
+          ...defaultMetrics,
+          currentCost: 0.0025
+        };
+        
+        rerender(
+          <StatusLine 
+            metrics={updatedMetrics}
+            visibleMetrics={['currentCost']}
+          />
+        );
+        
+        expect(lastFrame()).toContain('$0.0025');
+      });
+
+      it('should update session totals dynamically', () => {
+        const { lastFrame, rerender } = render(
+          <StatusLine 
+            metrics={defaultMetrics}
+            visibleMetrics={['sessionCost']}
+          />
+        );
+        
+        expect(lastFrame()).toContain('$0.045');
+        
+        const increasedMetrics = {
+          ...defaultMetrics,
+          sessionCost: 0.067
+        };
+        
+        rerender(
+          <StatusLine 
+            metrics={increasedMetrics}
+            visibleMetrics={['sessionCost']}
+          />
+        );
+        
+        expect(lastFrame()).toContain('$0.067');
+      });
+
+      it('should handle rapid cost updates without flickering', () => {
+        let currentCost = 0.001;
+        const { lastFrame, rerender } = render(
+          <StatusLine 
+            metrics={{ ...defaultMetrics, currentCost }}
+            visibleMetrics={['currentCost']}
+          />
+        );
+        
+        // Simulate rapid updates
+        for (let i = 0; i < 10; i++) {
+          currentCost += 0.0001;
+          rerender(
+            <StatusLine 
+              metrics={{ ...defaultMetrics, currentCost }}
+              visibleMetrics={['currentCost']}
+            />
+          );
+        }
+        
+        // Should show final value
+        expect(lastFrame()).toContain('$0.002');
+      });
+    });
+
+    describe('Integration with Token Metrics', () => {
+      it('should show cost alongside token metrics', () => {
+        const { lastFrame } = render(
+          <StatusLine 
+            metrics={defaultMetrics}
+            visibleMetrics={['totalTokens', 'currentCost', 'costPerToken']}
+            compact={false}
+          />
+        );
+        
+        expect(lastFrame()).toContain('Total: 150'); // tokens
+        expect(lastFrame()).toContain('Cost: $0.001'); // current cost
+        expect(lastFrame()).toContain('$0.000006/tok'); // cost per token
+      });
+
+      it('should calculate cost efficiency metrics', () => {
+        const efficientMetrics = {
+          ...defaultMetrics,
+          totalTokens: 1000,
+          currentCost: 0.002
+        };
+        
+        const { lastFrame } = render(
+          <StatusLine 
+            metrics={efficientMetrics}
+            visibleMetrics={['totalTokens', 'currentCost']}
+          />
+        );
+        
+        expect(lastFrame()).toContain('1K'); // 1000 tokens formatted
+        expect(lastFrame()).toContain('$0.002');
+      });
+    });
+
+    describe('Cost Display Themes', () => {
+      it('should adapt cost colors to light theme', () => {
+        const { lastFrame } = render(
+          <StatusLine 
+            metrics={defaultMetrics}
+            visibleMetrics={['currentCost']}
+            theme="light"
+          />
+        );
+        
+        expect(lastFrame()).toContain('$0.001');
+      });
+
+      it('should adapt cost colors to dark theme', () => {
+        const { lastFrame } = render(
+          <StatusLine 
+            metrics={defaultMetrics}
+            visibleMetrics={['currentCost']}
+            theme="dark"
+          />
+        );
+        
+        expect(lastFrame()).toContain('$0.001');
+      });
     });
   });
 });
