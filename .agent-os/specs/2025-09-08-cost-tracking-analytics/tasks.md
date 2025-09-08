@@ -28,14 +28,14 @@ These are the tasks to be completed for the spec detailed in @.agent-os/specs/20
    - [x] 2.8 Verify all runtime integration tests pass
 
 3. **Status Line Display Enhancement**
-   - [ ] 3.1 Write unit tests for status line cost display components
-   - [ ] 3.2 Modify StatusLine component to show real-time cost information
-   - [ ] 3.3 Implement cost formatting and color coding system
-   - [ ] 3.4 Add toggle controls for cost visibility
-   - [ ] 3.5 Integrate with existing mouse mode support
-   - [ ] 3.6 Add keyboard shortcuts for quick analytics access
-   - [ ] 3.7 Test responsive display with different terminal sizes
-   - [ ] 3.8 Verify all status line display tests pass
+   - [x] 3.1 Write unit tests for status line cost display components
+   - [x] 3.2 Modify StatusLine component to show real-time cost information
+   - [x] 3.3 Implement cost formatting and color coding system
+   - [x] 3.4 Add toggle controls for cost visibility
+   - [x] 3.5 Integrate with existing mouse mode support
+   - [x] 3.6 Add keyboard shortcuts for quick analytics access
+   - [x] 3.7 Test responsive display with different terminal sizes
+   - [x] 3.8 Verify all status line display tests pass
 
 4. **Analytics Command System**
    - [ ] 4.1 Write unit tests for analytics command handlers
