@@ -69,18 +69,24 @@ The following features have been implemented to achieve initial Claude Code pari
 
 ## Phase 3: Advanced Features & Ecosystem
 
-**Goal:** Add advanced features and build ecosystem integrations
-**Success Criteria:** Plugin system active, advanced workflows supported, community adoption
+**Goal:** Extend platform capabilities with multi-backend support and enhanced developer workflows
+**Success Criteria:** Plugin API released, multi-AI backend support, richer Git integration
 
-### Features
+### Next 5 Major Features (Your Roadmap)
 
-- [ ] **Plugin System** - Third-party tool integration and custom commands `XL`
-- [ ] **Advanced Git Integration** - PR workflows, branch management, merge assistance `L`
-- [ ] **Multi-Project Support** - Workspace management and project switching `M`
+- [ ] **Plugin API for Slash Commands + MCP Extensions** - Extensible platform for custom commands and MCP server integration `XL`
+- [ ] **Multi-Backend AI Support** - Claude (Anthropic), OpenAI, local LLMs via vLLM integration `XL`
+- [ ] **Richer Git Integration** - Diff previews, branch workflows, commit assistance `L`
+- [ ] **Inline Explain/Debug Command** - Context-aware code explanation with memory integration `M`
+- [ ] **Team Collaboration Mode** - Shared sessions, multi-user memory, team workflows `L`
+
+### Additional Platform Features
+
 - [ ] **AI Model Selection** - Support multiple Copilot models and providers `M`
 - [ ] **Advanced TODO Management** - Project planning and task automation `M`
-- [ ] **Team Collaboration Features** - Shared contexts and team settings `L`
-- [ ] **IDE Integration** - VS Code extension and editor plugins `XL`
+- [ ] **Advanced Context Persistence** - Cross-repository context sharing `M`
+- [ ] **Custom MCP Server SDK** - Tools for building custom MCP integrations `M`
+- [ ] **Enterprise Privacy Controls** - Self-hosted AI backend configuration `L`
 
 ### Dependencies
 

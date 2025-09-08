@@ -144,7 +144,14 @@ export function getAvailableMetrics(): (keyof StatusMetrics)[] {
     'sessionTurns',
     'sessionTokens',
     'streamProgress',
-    'charactersStreamed'
+    'charactersStreamed',
+    'currentCost',
+    'sessionCost',
+    'todayCost',
+    'costPerToken',
+    'projectedCost',
+    'provider',
+    'model'
   ];
 }
 
@@ -195,7 +202,7 @@ export async function applyPreset(preset: 'minimal' | 'detailed' | 'performance'
         showStatusLine: true,
         showProgressBar: true,
         compactMode: false,
-        visibleMetrics: ['inputTokens', 'outputTokens', 'totalTokens', 'responseTime', 'memoryUsageMB'] as Array<keyof StatusMetrics>,
+        visibleMetrics: ['inputTokens', 'outputTokens', 'totalTokens', 'responseTime', 'memoryUsageMB', 'currentCost', 'sessionCost'] as Array<keyof StatusMetrics>,
         showSpinner: true,
         showStreamingProgress: true,
         showToolCallProgress: true,
@@ -225,4 +232,98 @@ export async function importStatusConfig(json: string): Promise<void> {
   } catch (error) {
     throw new Error(`Invalid status configuration JSON: ${error}`);
   }
+}
+
+/**
+ * Cost-specific configuration functions
+ */
+
+/**
+ * Toggle cost analytics visibility (all cost metrics)
+ */
+export async function toggleCostAnalytics(): Promise<boolean> {
+  const config = await loadStatusConfig();
+  const costMetrics: (keyof StatusMetrics)[] = ['currentCost', 'sessionCost', 'todayCost', 'costPerToken'];
+  const metrics = [...config.visibleMetrics];
+  
+  // Check if any cost metrics are currently visible
+  const hasCostMetrics = costMetrics.some(metric => metrics.includes(metric));
+  
+  if (hasCostMetrics) {
+    // Remove all cost metrics
+    const filteredMetrics = metrics.filter(metric => !costMetrics.includes(metric));
+    await setStatusConfigValue('visibleMetrics', filteredMetrics);
+    return false;
+  } else {
+    // Add essential cost metrics
+    const essentialCostMetrics: (keyof StatusMetrics)[] = ['currentCost', 'sessionCost'];
+    essentialCostMetrics.forEach(metric => {
+      if (!metrics.includes(metric)) {
+        metrics.push(metric);
+      }
+    });
+    await setStatusConfigValue('visibleMetrics', metrics);
+    return true;
+  }
+}
+
+/**
+ * Toggle detailed cost analytics (all cost metrics including projections)
+ */
+export async function toggleDetailedCostAnalytics(): Promise<boolean> {
+  const config = await loadStatusConfig();
+  const detailedCostMetrics: (keyof StatusMetrics)[] = [
+    'currentCost', 'sessionCost', 'todayCost', 'costPerToken', 
+    'projectedCost', 'provider', 'model'
+  ];
+  const metrics = [...config.visibleMetrics];
+  
+  // Check if detailed cost metrics are visible
+  const hasDetailedMetrics = detailedCostMetrics.every(metric => metrics.includes(metric));
+  
+  if (hasDetailedMetrics) {
+    // Remove detailed cost metrics, keep only essential ones
+    const filteredMetrics = metrics.filter(metric => 
+      !['todayCost', 'costPerToken', 'projectedCost', 'provider', 'model'].includes(metric)
+    );
+    await setStatusConfigValue('visibleMetrics', filteredMetrics);
+    return false;
+  } else {
+    // Add all detailed cost metrics
+    detailedCostMetrics.forEach(metric => {
+      if (!metrics.includes(metric)) {
+        metrics.push(metric);
+      }
+    });
+    await setStatusConfigValue('visibleMetrics', metrics);
+    return true;
+  }
+}
+
+/**
+ * Toggle current cost display specifically
+ */
+export async function toggleCurrentCost(): Promise<boolean> {
+  const config = await loadStatusConfig();
+  const metrics = [...config.visibleMetrics];
+  const hasCurrentCost = metrics.includes('currentCost');
+  
+  if (hasCurrentCost) {
+    const filteredMetrics = metrics.filter(metric => metric !== 'currentCost');
+    await setStatusConfigValue('visibleMetrics', filteredMetrics);
+    return false;
+  } else {
+    metrics.push('currentCost');
+    await setStatusConfigValue('visibleMetrics', metrics);
+    return true;
+  }
+}
+
+/**
+ * Check if cost analytics are currently visible
+ */
+export async function isCostAnalyticsVisible(): Promise<boolean> {
+  const config = await loadStatusConfig();
+  const costMetrics: (keyof StatusMetrics)[] = ['currentCost', 'sessionCost', 'todayCost', 'costPerToken'];
+  return costMetrics.some(metric => config.visibleMetrics.includes(metric));
 }

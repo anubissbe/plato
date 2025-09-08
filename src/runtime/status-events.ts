@@ -22,6 +22,17 @@ export interface StatusEvents {
   // Token events
   'tokens:update': { input: number; output: number };
   
+  // Cost events
+  'cost:update': { 
+    input: number; 
+    output: number; 
+    estimatedCost?: number;
+    actualCost?: number;
+    sessionId: string;
+    isRealTime: boolean;
+    duration?: number;
+  };
+  
   // Tool call events
   'tool:start': { tool: string; server: string; params: any };
   'tool:end': { tool: string; success: boolean; error?: string };
@@ -72,6 +83,24 @@ export function emitStreamEnd(totalCharacters: number): void {
 
 export function emitTokenUpdate(input: number, output: number): void {
   emitStatusEvent('tokens:update', { input, output });
+}
+
+export function emitCostUpdate(
+  input: number, 
+  output: number, 
+  options: {
+    estimatedCost?: number;
+    actualCost?: number;
+    sessionId: string;
+    isRealTime: boolean;
+    duration?: number;
+  }
+): void {
+  emitStatusEvent('cost:update', { 
+    input, 
+    output, 
+    ...options 
+  });
 }
 
 export function emitToolStart(tool: string, server: string, params: any): void {
