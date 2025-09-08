@@ -270,7 +270,7 @@ export class RenderOptimizer {
     
     // Sort by priority
     const priorityOrder = { high: 0, normal: 1, low: 2 };
-    this.scheduledTasks.sort((a, b) => priorityOrder[a.priority] - priorityOrder[b.priority]);
+    this.scheduledTasks.sort((a, b) => priorityOrder[a.priority as keyof typeof priorityOrder] - priorityOrder[b.priority as keyof typeof priorityOrder]);
     
     // Execute in next tick
     Promise.resolve().then(() => {

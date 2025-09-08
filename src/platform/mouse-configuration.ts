@@ -473,7 +473,9 @@ export class MouseConfigurationManager {
     const optimizedConfig = { ...config };
 
     // Platform-specific overrides
-    const platformOverride = optimizedConfig.platformOverrides[capabilities.platform];
+    const platformOverride = capabilities.platform !== 'unknown' && capabilities.platform in optimizedConfig.platformOverrides 
+      ? optimizedConfig.platformOverrides[capabilities.platform as keyof PlatformOverrides] 
+      : undefined;
     if (platformOverride) {
       Object.assign(optimizedConfig, platformOverride);
     }

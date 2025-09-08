@@ -11,12 +11,14 @@ import { MemoryManager } from '../memory/manager.js';
 import type { MemoryEntry } from '../memory/types.js';
 import { SemanticAnalyzer } from '../context/semantic-analyzer.js';
 import { ContextPersistenceManager } from '../context/session-persistence.js';
+import { createDefaultAnalyticsService, AnalyticsService } from '../services/analytics.js';
 import { 
   emitTurnStart, 
   emitTurnEnd, 
   emitStreamStart, 
   emitStreamEnd,
   emitTokenUpdate,
+  emitCostUpdate,
   emitToolStart,
   emitToolEnd,
   emitPatchExtract,
@@ -46,6 +48,101 @@ const history: Msg[] = [
   ].join('\n') }
 ];
 
+/**
+ * Real-time cost tracking for streaming responses
+ * Estimates token usage and costs as content streams in
+ */
+class RealTimeCostTracker {
+  private estimatedOutputTokens = 0;
+  private inputTokens = 0;
+  private sessionId: string;
+  private startTime: number;
+  private lastCostEmit = 0;
+  private readonly EMIT_INTERVAL_MS = 250; // Emit cost updates every 250ms
+  private readonly TOKENS_PER_CHAR_ESTIMATE = 0.25; // Rough estimation: 4 chars per token
+
+  constructor(sessionId: string, inputTokens: number) {
+    this.sessionId = sessionId;
+    this.inputTokens = inputTokens;
+    this.startTime = Date.now();
+  }
+
+  addChunk(text: string): void {
+    // Estimate output tokens from the text chunk
+    const chunkTokens = Math.ceil(text.length * this.TOKENS_PER_CHAR_ESTIMATE);
+    this.estimatedOutputTokens += chunkTokens;
+
+    // Throttle cost emissions to avoid flooding
+    const now = Date.now();
+    if (now - this.lastCostEmit >= this.EMIT_INTERVAL_MS) {
+      this.emitRealTimeCost();
+      this.lastCostEmit = now;
+    }
+  }
+
+  private emitRealTimeCost(): void {
+    try {
+      const service = getAnalyticsServiceInstance();
+      const estimatedCost = service.calculateCost(
+        'copilot',
+        'gpt-3.5-turbo',
+        this.inputTokens,
+        this.estimatedOutputTokens
+      );
+
+      // Emit a custom event for real-time cost updates
+      emitCostUpdate(this.inputTokens, this.estimatedOutputTokens, {
+        estimatedCost,
+        sessionId: this.sessionId,
+        isRealTime: true
+      });
+    } catch (error) {
+      // Silently handle errors to avoid disrupting streaming
+      console.debug('Real-time cost calculation failed:', error);
+    }
+  }
+
+  finalize(actualOutputTokens: number): void {
+    // Final cost update with actual token counts
+    try {
+      const service = getAnalyticsServiceInstance();
+      const actualCost = service.calculateCost(
+        'copilot',
+        'gpt-3.5-turbo',
+        this.inputTokens,
+        actualOutputTokens
+      );
+
+      emitCostUpdate(this.inputTokens, actualOutputTokens, {
+        actualCost,
+        sessionId: this.sessionId,
+        isRealTime: false,
+        duration: Date.now() - this.startTime
+      });
+    } catch (error) {
+      console.debug('Final cost calculation failed:', error);
+    }
+  }
+
+  getEstimatedCost(): number {
+    try {
+      const service = getAnalyticsServiceInstance();
+      return service.calculateCost('copilot', 'gpt-3.5-turbo', this.inputTokens, this.estimatedOutputTokens);
+    } catch {
+      return 0;
+    }
+  }
+}
+
+/**
+ * Estimate input tokens from messages
+ * Uses a rough approximation based on character count
+ */
+async function estimateInputTokens(messages: Msg[]): Promise<number> {
+  const totalChars = messages.reduce((acc, msg) => acc + msg.content.length, 0);
+  return Math.ceil(totalChars * 0.25); // Rough estimation: 4 characters per token
+}
+
 const metrics = {
   inputTokens: 0,
   outputTokens: 0,
@@ -70,7 +167,231 @@ let contextPersistenceManager: ContextPersistenceManager | null = null;
 // Semantic analyzer instance
 const semanticAnalyzer = new SemanticAnalyzer();
 
+// Analytics service instance
+let analyticsService: AnalyticsService | null = null;
+
+// Current session ID for cost tracking
+let currentSessionId: string = generateSessionId();
+
 type OrchestratorEvent = { type: 'tool-start'|'tool-end'|'info'; message: string };
+
+// Generate a unique session ID
+function generateSessionId(): string {
+  const sessionId = `session-${Date.now()}-${Math.random().toString(36).substr(2, 9)}`;
+  
+  // Initialize cost analytics for the new session (async, non-blocking)
+  initializeSessionCostAnalyticsInternal(sessionId).catch(error => {
+    console.debug('Failed to initialize session cost analytics:', error);
+  });
+  
+  return sessionId;
+}
+
+// Internal helper for session cost analytics initialization
+async function initializeSessionCostAnalyticsInternal(sessionId: string): Promise<void> {
+  try {
+    const contextManager = await ensureContextPersistenceManager();
+    
+    // Try to restore existing cost analytics first
+    const existingCostAnalytics = await contextManager.getSessionCostAnalytics();
+    
+    if (existingCostAnalytics) {
+      // If we have existing cost analytics, continue with that context
+      console.log(`Continuing session with existing cost context: $${existingCostAnalytics.totalCost.toFixed(4)} total cost`);
+      
+      // Update session ID to current session
+      existingCostAnalytics.sessionId = sessionId;
+      
+      // Try to restore to memory system as well
+      try {
+        const memoryManager = await ensureMemoryManager();
+        await memoryManager.updateSessionCostAnalytics(sessionId, {
+          totalCost: existingCostAnalytics.totalCost,
+          totalInputTokens: existingCostAnalytics.totalInputTokens,
+          totalOutputTokens: existingCostAnalytics.totalOutputTokens,
+          interactionCount: existingCostAnalytics.interactionCount
+        });
+      } catch (memError) {
+        console.debug('Failed to sync cost analytics to memory system:', memError);
+      }
+    } else {
+      // No existing cost analytics, initialize fresh
+      await contextManager.initializeSessionCostAnalytics(sessionId);
+    }
+  } catch (error) {
+    // Silent failure - don't interrupt session creation
+    console.debug('Session cost analytics initialization failed:', error);
+  }
+}
+
+// Initialize analytics service on first use
+async function ensureAnalyticsService(): Promise<AnalyticsService> {
+  if (!analyticsService) {
+    analyticsService = createDefaultAnalyticsService();
+    await analyticsService.initialize();
+  }
+  return analyticsService;
+}
+
+/**
+ * Get analytics service instance synchronously (for real-time use)
+ */
+function getAnalyticsServiceInstance(): AnalyticsService {
+  if (!analyticsService) {
+    analyticsService = createDefaultAnalyticsService();
+    // Initialize asynchronously in background
+    analyticsService.initialize().catch(error => {
+      console.warn('Failed to initialize analytics service:', error);
+    });
+  }
+  return analyticsService;
+}
+
+/**
+ * Get current session ID
+ */
+function getCurrentSessionId(): string {
+  return currentSessionId;
+}
+
+// Record cost metrics for an interaction
+async function recordCostMetrics(inputTokens: number, outputTokens: number, duration: number): Promise<void> {
+  try {
+    const analytics = await ensureAnalyticsService();
+    
+    // Get current provider and model from config or defaults
+    const config = await loadConfig();
+    const provider = 'copilot'; // Default provider for Plato
+    const model = typeof config.model === 'string' ? config.model : (config.model?.active || 'gpt-3.5-turbo');
+    
+    await analytics.recordInteraction({
+      sessionId: currentSessionId,
+      model,
+      inputTokens,
+      outputTokens,
+      provider,
+      duration
+    });
+
+    // Update session persistence with cost analytics data
+    await updateSessionCostData(inputTokens, outputTokens);
+    
+    // Update memory system with cost analytics data
+    await updateMemoryCostAnalytics(
+      currentSessionId,
+      inputTokens,
+      outputTokens,
+      model,
+      provider,
+      undefined, // command - could be passed from context if available
+      duration
+    );
+  } catch (error) {
+    // Log but don't throw - analytics failures shouldn't break main functionality
+    console.warn('Analytics recording failed:', error);
+  }
+}
+
+// Update memory system with cost analytics data
+async function updateMemoryCostAnalytics(
+  sessionId: string,
+  inputTokens: number,
+  outputTokens: number,
+  model: string = 'default',
+  provider: 'copilot' | 'openai' | 'claude' = 'copilot',
+  command?: string,
+  duration?: number
+): Promise<void> {
+  try {
+    const analytics = await ensureAnalyticsService();
+    const cost = analytics.calculateCost(provider, model, inputTokens, outputTokens);
+    
+    // Get memory manager
+    const memoryManager = await ensureMemoryManager();
+    
+    // Calculate session totals by getting all session memories with cost
+    const sessionMemories = await memoryManager.getSessionMemoriesWithCost(sessionId);
+    const currentTotalCost = sessionMemories.reduce((sum, m) => sum + (m.costMetadata?.cost || 0), 0) + cost;
+    const currentTotalInputTokens = sessionMemories.reduce((sum, m) => sum + (m.costMetadata?.inputTokens || 0), 0) + inputTokens;
+    const currentTotalOutputTokens = sessionMemories.reduce((sum, m) => sum + (m.costMetadata?.outputTokens || 0), 0) + outputTokens;
+    const currentInteractionCount = sessionMemories.length + 1;
+
+    // Build model breakdown
+    const modelBreakdown: Record<string, { cost: number; tokens: number; interactions: number }> = {};
+    for (const memory of sessionMemories) {
+      if (memory.costMetadata) {
+        const memModel = memory.costMetadata.model;
+        if (!modelBreakdown[memModel]) {
+          modelBreakdown[memModel] = { cost: 0, tokens: 0, interactions: 0 };
+        }
+        modelBreakdown[memModel].cost += memory.costMetadata.cost;
+        modelBreakdown[memModel].tokens += memory.costMetadata.inputTokens + memory.costMetadata.outputTokens;
+        modelBreakdown[memModel].interactions++;
+      }
+    }
+
+    // Add current interaction to breakdown
+    if (!modelBreakdown[model]) {
+      modelBreakdown[model] = { cost: 0, tokens: 0, interactions: 0 };
+    }
+    modelBreakdown[model].cost += cost;
+    modelBreakdown[model].tokens += inputTokens + outputTokens;
+    modelBreakdown[model].interactions++;
+
+    // Update session cost analytics in memory system
+    await memoryManager.updateSessionCostAnalytics(sessionId, {
+      totalCost: currentTotalCost,
+      totalInputTokens: currentTotalInputTokens,
+      totalOutputTokens: currentTotalOutputTokens,
+      interactionCount: currentInteractionCount,
+      modelBreakdown
+    });
+
+    console.debug(`Updated memory cost analytics: Session ${sessionId}, Total cost: $${currentTotalCost.toFixed(4)}`);
+  } catch (error) {
+    console.debug('Failed to update memory cost analytics:', error);
+  }
+}
+
+// Update session persistence with cost data
+async function updateSessionCostData(inputTokens: number, outputTokens: number): Promise<void> {
+  try {
+    const analytics = await ensureAnalyticsService();
+    const contextManager = await ensureContextPersistenceManager();
+    
+    // Get current session cost breakdown
+    const sessionCost = await analytics.getCurrentSessionCost(currentSessionId);
+    const sessionBreakdown = await analytics.getSessionBreakdown(currentSessionId);
+    
+    if (sessionBreakdown) {
+      // Get the raw session metrics to calculate separate token counts
+      const today = new Date();
+      today.setHours(0, 0, 0, 0);
+      const startOfDay = today.getTime();
+      const endOfDay = startOfDay + (24 * 60 * 60 * 1000) - 1;
+      
+      const analyticsManager = analytics.getAnalyticsManager();
+      const sessionMetrics = await analyticsManager.getMetrics(startOfDay, endOfDay, {
+        sessionId: currentSessionId
+      });
+      
+      // Calculate separate input and output tokens
+      const totalInputTokens = sessionMetrics.reduce((sum, m) => sum + m.inputTokens, 0);
+      const totalOutputTokens = sessionMetrics.reduce((sum, m) => sum + m.outputTokens, 0);
+      
+      // Update session persistence with aggregated cost data
+      await contextManager.updateSessionCostAnalytics(currentSessionId, {
+        totalCost: sessionCost,
+        totalInputTokens,
+        totalOutputTokens,
+        interactionCount: sessionBreakdown.interactions || 0
+      });
+    }
+  } catch (error) {
+    console.debug('Failed to update session cost data:', error);
+    // Don't throw - this is supplementary functionality
+  }
+}
 
 // Initialize memory manager on first use
 async function ensureMemoryManager(): Promise<MemoryManager> {
@@ -113,8 +434,15 @@ export const orchestrator = {
     metrics.durationMs += dt;
     metrics.turns += 1;
     if (usage) {
-      metrics.inputTokens += usage.prompt_tokens ?? usage.input_tokens ?? 0;
-      metrics.outputTokens += usage.completion_tokens ?? usage.output_tokens ?? 0;
+      const inputTokens = usage.prompt_tokens ?? usage.input_tokens ?? 0;
+      const outputTokens = usage.completion_tokens ?? usage.output_tokens ?? 0;
+      metrics.inputTokens += inputTokens;
+      metrics.outputTokens += outputTokens;
+      
+      // Record cost metrics asynchronously
+      recordCostMetrics(inputTokens, outputTokens, dt).catch(error => {
+        console.warn('Failed to record cost metrics:', error);
+      });
     }
     const assistant = content || '(no content)';
     history.push({ role: 'assistant', content: assistant });
@@ -143,6 +471,11 @@ export const orchestrator = {
     // Create stream progress tracker
     const streamTracker = new StreamProgressTracker();
     
+    // Create real-time cost tracker
+    const sessionId = getCurrentSessionId();
+    const estimatedInputTokens = await estimateInputTokens(msgs);
+    const costTracker = new RealTimeCostTracker(sessionId, estimatedInputTokens);
+    
     try {
       // Emit stream start event
       emitStreamStart();
@@ -152,6 +485,7 @@ export const orchestrator = {
         if (streamCancellation?.signal.aborted) return;
         onDelta(d);
         streamTracker.addChunk(d);
+        costTracker.addChunk(d); // Add real-time cost tracking
         saveSessionDebounced().catch(()=>{}); 
       });
       
@@ -174,6 +508,14 @@ export const orchestrator = {
         
         // Emit token update
         emitTokenUpdate(inputTokens, outputTokens);
+        
+        // Finalize real-time cost tracking with actual token counts
+        costTracker.finalize(outputTokens);
+        
+        // Record cost metrics asynchronously
+        recordCostMetrics(inputTokens, outputTokens, dt).catch(error => {
+          console.warn('Failed to record cost metrics:', error);
+        });
       }
       
       // Emit memory update periodically
@@ -197,7 +539,26 @@ export const orchestrator = {
       
       // Add to transcript if enabled
       if (transcriptMode) {
-        await this.addMemory('transcript', `User: ${input}\nAssistant: ${assistant}`);
+        // Get cost info from analytics for the memory entry
+        const config = await loadConfig();
+        const provider = 'copilot';
+        const model = typeof config.model === 'string' ? config.model : (config.model?.active || 'gpt-3.5-turbo');
+        const analytics = await ensureAnalyticsService();
+        
+        // Use the last recorded token metrics for this interaction
+        const lastInputTokens = usage ? (usage.prompt_tokens ?? usage.input_tokens ?? 0) : 0;
+        const lastOutputTokens = usage ? (usage.completion_tokens ?? usage.output_tokens ?? 0) : 0;
+        const cost = analytics.calculateCost(provider, model, lastInputTokens, lastOutputTokens);
+        
+        await this.addMemory('transcript', `User: ${input}\nAssistant: ${assistant}`, {
+          cost,
+          inputTokens: lastInputTokens,
+          outputTokens: lastOutputTokens,
+          model,
+          provider,
+          sessionId: currentSessionId,
+          duration: dt
+        });
       }
       
       return assistant;
@@ -405,7 +766,7 @@ export const orchestrator = {
       // Ignore errors
     }
   },
-  async addMemory(type: MemoryEntry['type'], content: string): Promise<void> {
+  async addMemory(type: MemoryEntry['type'], content: string, costMetadata?: MemoryEntry['costMetadata']): Promise<string> {
     try {
       const manager = await ensureMemoryManager();
       const timestamp = new Date().toISOString();
@@ -415,10 +776,15 @@ export const orchestrator = {
         id,
         type,
         content,
-        timestamp
+        timestamp,
+        tags: [],
+        costMetadata
       });
-    } catch {
-      // Ignore errors
+      
+      return id;
+    } catch (error) {
+      console.debug('Failed to add memory:', error);
+      return '';
     }
   },
   async getProjectContext(): Promise<string> {
@@ -456,14 +822,44 @@ export const orchestrator = {
       if (session) {
         // Restore last context if available
         if (session.context) {
-          history.push({ role: 'system', content: `[Restored session context from ${session.startTime}]` });
+          let contextMessage = `[Restored session context from ${session.startTime}`;
+          
+          // Add cost analytics information if available
+          if (session.costAnalytics) {
+            contextMessage += `, Cost: $${session.costAnalytics.totalCost.toFixed(4)} ` +
+                             `(${session.costAnalytics.interactionCount} interactions)`;
+          }
+          
+          contextMessage += ']';
+          history.push({ role: 'system', content: contextMessage });
+        }
+        
+        // Restore cost analytics to the memory system session
+        if (session.costAnalytics) {
+          // Ensure current session ID matches or update the cost analytics
+          const costAnalytics = { ...session.costAnalytics };
+          costAnalytics.sessionId = currentSessionId;
+          
+          // Update memory system with restored cost analytics
+          await manager.updateSessionCostAnalytics(currentSessionId, {
+            totalCost: costAnalytics.totalCost,
+            totalInputTokens: costAnalytics.totalInputTokens,
+            totalOutputTokens: costAnalytics.totalOutputTokens,
+            interactionCount: costAnalytics.interactionCount,
+            modelBreakdown: costAnalytics.modelBreakdown
+          });
+          
+          console.log(`Restored memory cost analytics: $${costAnalytics.totalCost.toFixed(4)} total cost`);
         }
       }
       
       // Also restore context state
       await restoreContextState();
-    } catch {
-      // Ignore errors
+      
+      // Restore cost analytics for the current session
+      await restoreCostAnalytics(currentSessionId);
+    } catch (error) {
+      console.debug('Session restoration error:', error);
     }
   },
   getPendingPatch() { return pendingPatch; },
@@ -574,6 +970,134 @@ export const orchestrator = {
       return message.content;
     }
     return null;
+  },
+
+  /**
+   * Update memory system with cost metadata
+   */
+  async updateMemoryCostAnalytics(
+    sessionId: string,
+    inputTokens: number,
+    outputTokens: number,
+    model: string = 'default',
+    provider: 'copilot' | 'openai' | 'claude' = 'copilot',
+    command?: string,
+    duration?: number
+  ): Promise<void> {
+    try {
+      const analytics = await ensureAnalyticsService();
+      const cost = analytics.calculateCost(provider, model, inputTokens, outputTokens);
+      
+      // Get memory manager
+      const memoryManager = await ensureMemoryManager();
+      
+      // Calculate session totals by getting all session memories with cost
+      const sessionMemories = await memoryManager.getSessionMemoriesWithCost(sessionId);
+      const currentTotalCost = sessionMemories.reduce((sum, m) => sum + (m.costMetadata?.cost || 0), 0) + cost;
+      const currentTotalInputTokens = sessionMemories.reduce((sum, m) => sum + (m.costMetadata?.inputTokens || 0), 0) + inputTokens;
+      const currentTotalOutputTokens = sessionMemories.reduce((sum, m) => sum + (m.costMetadata?.outputTokens || 0), 0) + outputTokens;
+      const currentInteractionCount = sessionMemories.length + 1;
+
+      // Build model breakdown
+      const modelBreakdown: Record<string, { cost: number; tokens: number; interactions: number }> = {};
+      for (const memory of sessionMemories) {
+        if (memory.costMetadata) {
+          const memModel = memory.costMetadata.model;
+          if (!modelBreakdown[memModel]) {
+            modelBreakdown[memModel] = { cost: 0, tokens: 0, interactions: 0 };
+          }
+          modelBreakdown[memModel].cost += memory.costMetadata.cost;
+          modelBreakdown[memModel].tokens += memory.costMetadata.inputTokens + memory.costMetadata.outputTokens;
+          modelBreakdown[memModel].interactions++;
+        }
+      }
+
+      // Add current interaction to breakdown
+      if (!modelBreakdown[model]) {
+        modelBreakdown[model] = { cost: 0, tokens: 0, interactions: 0 };
+      }
+      modelBreakdown[model].cost += cost;
+      modelBreakdown[model].tokens += inputTokens + outputTokens;
+      modelBreakdown[model].interactions++;
+
+      // Update session cost analytics in memory system
+      await memoryManager.updateSessionCostAnalytics(sessionId, {
+        totalCost: currentTotalCost,
+        totalInputTokens: currentTotalInputTokens,
+        totalOutputTokens: currentTotalOutputTokens,
+        interactionCount: currentInteractionCount,
+        modelBreakdown
+      });
+
+      console.debug(`Updated memory cost analytics: Session ${sessionId}, Total cost: $${currentTotalCost.toFixed(4)}`);
+    } catch (error) {
+      console.debug('Failed to update memory cost analytics:', error);
+    }
+  },
+
+  /**
+   * Get session cost analytics from memory
+   */
+  async getMemorySessionCostAnalytics(sessionId: string): Promise<any> {
+    try {
+      const memoryManager = await ensureMemoryManager();
+      return await memoryManager.getSessionCostAnalytics(sessionId);
+    } catch (error) {
+      console.debug('Failed to get memory session cost analytics:', error);
+      return null;
+    }
+  },
+
+  /**
+   * Manually restore cost analytics for the current session
+   */
+  async restoreSessionCostAnalytics(): Promise<boolean> {
+    try {
+      await restoreCostAnalytics(currentSessionId);
+      return true;
+    } catch (error) {
+      console.debug('Failed to restore session cost analytics:', error);
+      return false;
+    }
+  },
+
+  /**
+   * Get current session cost context summary
+   */
+  async getCurrentSessionCostContext(): Promise<{
+    sessionId: string;
+    hasMemoryCostData: boolean;
+    hasContextCostData: boolean;
+    summary: string | null;
+  }> {
+    try {
+      const memoryManager = await ensureMemoryManager();
+      const contextManager = await ensureContextPersistenceManager();
+      
+      const memoryCostAnalytics = await memoryManager.getSessionCostAnalytics(currentSessionId);
+      const contextCostAnalytics = await contextManager.getSessionCostAnalytics();
+      
+      let summary = null;
+      if (memoryCostAnalytics || contextCostAnalytics) {
+        const analytics = memoryCostAnalytics || contextCostAnalytics;
+        summary = `$${analytics!.totalCost.toFixed(4)} total cost, ${analytics!.interactionCount} interactions`;
+      }
+      
+      return {
+        sessionId: currentSessionId,
+        hasMemoryCostData: !!memoryCostAnalytics,
+        hasContextCostData: !!contextCostAnalytics,
+        summary
+      };
+    } catch (error) {
+      console.debug('Failed to get session cost context:', error);
+      return {
+        sessionId: currentSessionId,
+        hasMemoryCostData: false,
+        hasContextCostData: false,
+        summary: null
+      };
+    }
   },
 
   clearHistorySelection() {
@@ -815,6 +1339,113 @@ export const orchestrator = {
     } catch (error: any) {
       throw new Error(`Failed to rollback context: ${error?.message || error}`);
     }
+  },
+
+  /**
+   * Add a message to the conversation history
+   */
+  addMessage(message: Msg): void {
+    history.push(message);
+  },
+
+  /**
+   * Get all messages in the conversation
+   */
+  getMessages(): Msg[] {
+    return [...history];
+  },
+
+  /**
+   * Update token usage metrics
+   */
+  updateTokenMetrics(inputTokens: number, outputTokens: number): void {
+    metrics.inputTokens += inputTokens;
+    metrics.outputTokens += outputTokens;
+  },
+
+  /**
+   * Get the analytics service instance
+   */
+  getAnalyticsService() {
+    return getAnalyticsServiceInstance();
+  },
+
+  /**
+   * Get current session cost
+   */
+  async getCurrentSessionCost(): Promise<number> {
+    try {
+      const service = getAnalyticsServiceInstance();
+      return await service.getCurrentSessionCost(getCurrentSessionId());
+    } catch (error) {
+      console.warn('Failed to get current session cost:', error);
+      return 0;
+    }
+  },
+
+  /**
+   * Get today's total cost
+   */
+  async getTodayTotalCost(): Promise<number> {
+    try {
+      const service = getAnalyticsServiceInstance();
+      return await service.getTodayTotalCost();
+    } catch (error) {
+      console.warn('Failed to get today\'s total cost:', error);
+      return 0;
+    }
+  },
+
+  /**
+   * Get detailed session cost breakdown
+   */
+  async getSessionBreakdown(sessionId?: string): Promise<any> {
+    try {
+      const service = getAnalyticsServiceInstance();
+      const id = sessionId || getCurrentSessionId();
+      return await service.getSessionBreakdown(id);
+    } catch (error) {
+      console.warn('Failed to get session breakdown:', error);
+      return null;
+    }
+  },
+
+  /**
+   * Get analytics batch performance statistics
+   */
+  getBatchPerformanceStats() {
+    try {
+      const service = getAnalyticsServiceInstance();
+      return service.getBatchStats();
+    } catch (error) {
+      console.warn('Failed to get batch stats:', error);
+      return null;
+    }
+  },
+
+  /**
+   * Get session cost analytics from session persistence
+   */
+  async getSessionCostAnalytics() {
+    try {
+      const contextManager = await ensureContextPersistenceManager();
+      return await contextManager.getSessionCostAnalytics();
+    } catch (error) {
+      console.warn('Failed to get session cost analytics:', error);
+      return null;
+    }
+  },
+
+  /**
+   * Initialize cost analytics for current session
+   */
+  async initializeSessionCostAnalytics() {
+    try {
+      const contextManager = await ensureContextPersistenceManager();
+      await contextManager.initializeSessionCostAnalytics(currentSessionId);
+    } catch (error) {
+      console.warn('Failed to initialize session cost analytics:', error);
+    }
   }
 };
 
@@ -1025,6 +1656,41 @@ async function saveContextState() {
   }
 }
 
+// Restore cost analytics from previous sessions
+async function restoreCostAnalytics(sessionId: string): Promise<void> {
+  try {
+    // Try to restore from memory system first
+    const memoryManager = await ensureMemoryManager();
+    const memoryCostAnalytics = await memoryManager.getSessionCostAnalytics(sessionId);
+    
+    // Try to restore from context persistence
+    const contextManager = await ensureContextPersistenceManager();
+    const contextCostAnalytics = await contextManager.getSessionCostAnalytics();
+    
+    // Use the most recent/complete cost analytics
+    let costAnalytics = memoryCostAnalytics || contextCostAnalytics;
+    
+    if (costAnalytics) {
+      // Ensure analytics service is initialized with restored data
+      const analytics = await ensureAnalyticsService();
+      
+      // Log restoration
+      console.log(`Restored cost analytics from ${memoryCostAnalytics ? 'memory' : 'context'}: ` +
+                  `$${costAnalytics.totalCost.toFixed(4)} total cost, ` +
+                  `${costAnalytics.interactionCount} interactions`);
+      
+      // Add restoration message to history
+      history.push({
+        role: 'system',
+        content: `[Cost analytics restored: $${costAnalytics.totalCost.toFixed(4)} total cost, ` +
+                 `${costAnalytics.interactionCount} previous interactions]`
+      });
+    }
+  } catch (error) {
+    console.debug('Failed to restore cost analytics:', error);
+  }
+}
+
 async function restoreContextState() {
   try {
     const contextManager = await ensureContextPersistenceManager();
@@ -1066,11 +1732,27 @@ async function restoreContextState() {
       
       // Add restoration notice to history
       if (mergedState.sessionMetadata?.startTime) {
+        let restorationMessage = `[Context restored: ${mergedState.currentFiles.length} files, ` +
+                                `${mergedState.sessionMetadata.totalQueries || 0} previous queries`;
+        
+        // Add cost information if available
+        if (mergedState.sessionMetadata.costAnalytics) {
+          const costAnalytics = mergedState.sessionMetadata.costAnalytics;
+          restorationMessage += `, Total cost: $${costAnalytics.totalCost.toFixed(4)} ` +
+                               `(${costAnalytics.interactionCount} interactions)`;
+        }
+        
+        restorationMessage += ']';
+        
         history.push({
           role: 'system',
-          content: `[Context restored: ${mergedState.currentFiles.length} files, ` +
-                   `${mergedState.sessionMetadata.totalQueries || 0} previous queries]`
+          content: restorationMessage
         });
+      }
+      
+      // Restore cost analytics to current session if available
+      if (mergedState.sessionMetadata?.costAnalytics) {
+        console.log(`Restored session cost analytics: $${mergedState.sessionMetadata.costAnalytics.totalCost.toFixed(4)} total cost`);
       }
     }
   } catch (error) {

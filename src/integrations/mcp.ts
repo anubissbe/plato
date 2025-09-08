@@ -3,7 +3,8 @@ import http from 'http';
 import { URL } from 'url';
 import path from 'path';
 
-type Server = { id: string; url: string };
+export type Server = { id: string; url: string };
+export type MCPServer = Server;
 const DB = path.join(process.cwd(), '.plato/mcp-servers.json');
 
 export async function listServers(): Promise<Server[]> {

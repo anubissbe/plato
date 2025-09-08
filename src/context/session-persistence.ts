@@ -21,6 +21,15 @@ export interface ContextState {
     startTime: string;
     lastActivity: string;
     totalQueries: number;
+    costAnalytics?: {
+      totalCost: number;
+      totalInputTokens: number;
+      totalOutputTokens: number;
+      interactionCount: number;
+      sessionId: string;
+      avgCostPerQuery: number;
+      lastCostUpdate: string;
+    };
     [key: string]: any;
   };
 }
@@ -189,6 +198,87 @@ export class ContextPersistenceManager {
       }
       console.warn('Failed to load from session.json:', error);
       return null;
+    }
+  }
+
+  /**
+   * Update cost analytics data in session metadata
+   */
+  async updateSessionCostAnalytics(
+    sessionId: string,
+    costData: {
+      totalCost: number;
+      totalInputTokens: number;
+      totalOutputTokens: number;
+      interactionCount: number;
+    }
+  ): Promise<void> {
+    try {
+      // Load current session state
+      const currentState = await this.loadFromSession();
+      
+      if (currentState) {
+        // Calculate average cost per query
+        const avgCostPerQuery = costData.interactionCount > 0 ? costData.totalCost / costData.interactionCount : 0;
+        
+        // Update cost analytics in session metadata
+        currentState.sessionMetadata.costAnalytics = {
+          ...costData,
+          sessionId,
+          avgCostPerQuery,
+          lastCostUpdate: new Date().toISOString()
+        };
+        
+        // Update last activity
+        currentState.sessionMetadata.lastActivity = new Date().toISOString();
+        
+        // Save updated state
+        await this.saveToSession(currentState);
+      }
+    } catch (error) {
+      console.warn('Failed to update session cost analytics:', error);
+    }
+  }
+
+  /**
+   * Get cost analytics data from session
+   */
+  async getSessionCostAnalytics(): Promise<{
+    totalCost: number;
+    totalInputTokens: number;
+    totalOutputTokens: number;
+    interactionCount: number;
+    sessionId: string;
+    avgCostPerQuery: number;
+    lastCostUpdate: string;
+  } | null> {
+    try {
+      const sessionState = await this.loadFromSession();
+      return sessionState?.sessionMetadata.costAnalytics || null;
+    } catch (error) {
+      console.warn('Failed to get session cost analytics:', error);
+      return null;
+    }
+  }
+
+  /**
+   * Initialize cost analytics for a new session
+   */
+  async initializeSessionCostAnalytics(sessionId: string): Promise<void> {
+    const currentState = await this.loadFromSession();
+    
+    if (currentState && !currentState.sessionMetadata.costAnalytics) {
+      currentState.sessionMetadata.costAnalytics = {
+        totalCost: 0,
+        totalInputTokens: 0,
+        totalOutputTokens: 0,
+        interactionCount: 0,
+        sessionId,
+        avgCostPerQuery: 0,
+        lastCostUpdate: new Date().toISOString()
+      };
+      
+      await this.saveToSession(currentState);
     }
   }
 

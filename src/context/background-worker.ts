@@ -35,7 +35,7 @@ function initializeWorker(): void {
     parentPort?.postMessage({
       type: 'initError',
       workerId,
-      error: error.message
+      error: error instanceof Error ? error.message : String(error)
     });
   }
 }
@@ -100,7 +100,7 @@ async function handleTask(task: any): Promise<TaskResult> {
     return {
       taskId: task.id,
       success: false,
-      error: error.message,
+      error: error instanceof Error ? error.message : String(error),
       duration
     };
   }
@@ -118,7 +118,7 @@ async function handleFileAnalysis(data: { filePath: string }): Promise<any> {
     
     return fileIndex;
   } catch (error) {
-    throw new Error(`Failed to analyze file ${filePath}: ${error.message}`);
+    throw new Error(`Failed to analyze file ${filePath}: ${error instanceof Error ? error.message : String(error)}`);
   }
 }
 
@@ -158,7 +158,7 @@ async function handleBatchIndexing(data: { filePaths: string[]; batchSize: numbe
         
       } catch (error) {
         stats.failedFiles++;
-        console.warn(`Worker ${workerId}: Failed to process ${filePath}:`, error.message);
+        console.warn(`Worker ${workerId}: Failed to process ${filePath}:`, error instanceof Error ? error.message : String(error));
       }
     }
     
@@ -208,7 +208,7 @@ async function handleRelevanceScoring(data: { filePaths: string[]; context: any 
         score: 0,
         reasons: ['error'],
         confidence: 0,
-        error: error.message
+        error: error instanceof Error ? error.message : String(error)
       };
     }
   });
@@ -232,7 +232,7 @@ async function handleContentSampling(data: { files: Array<{ path: string; conten
       const fileIndex = await analyzer.analyzeFile(file.path, file.content);
       await tempIndex.addFile(fileIndex);
     } catch (error) {
-      console.warn(`Worker ${workerId}: Failed to index ${file.path} for sampling:`, error.message);
+      console.warn(`Worker ${workerId}: Failed to index ${file.path} for sampling:`, error instanceof Error ? error.message : String(error));
     }
   }
 
@@ -245,7 +245,7 @@ async function handleContentSampling(data: { files: Array<{ path: string; conten
         file: file.path,
         content: '',
         tokens: 0,
-        error: error.message
+        error: error instanceof Error ? error.message : String(error)
       };
     }
   });
@@ -270,7 +270,7 @@ async function handleIndexSerialization(data: { indexData: any }): Promise<strin
     
     return serialized;
   } catch (error) {
-    throw new Error(`Serialization failed: ${error.message}`);
+    throw new Error(`Serialization failed: ${error instanceof Error ? error.message : String(error)}`);
   }
 }
 
@@ -297,7 +297,7 @@ async function handleSymbolExtraction(data: { files: Array<{ path: string; conte
         language: 'unknown',
         symbols: [],
         symbolCount: 0,
-        error: error.message
+        error: error instanceof Error ? error.message : String(error)
       };
     }
   });
@@ -334,7 +334,7 @@ async function handleImportGraphBuild(data: { fileIndexes: any[] }): Promise<any
       edgeCount: Array.from(importGraph.values()).reduce((sum, node) => sum + node.imports.length, 0)
     };
   } catch (error) {
-    throw new Error(`Import graph build failed: ${error.message}`);
+    throw new Error(`Import graph build failed: ${error instanceof Error ? error.message : String(error)}`);
   }
 }
 
@@ -353,7 +353,7 @@ function handleMessage(message: any): void {
       .catch(error => {
         parentPort?.postMessage({
           type: 'taskError',
-          error: error.message
+          error: error instanceof Error ? error.message : String(error)
         });
       });
   }
@@ -366,7 +366,7 @@ function handleError(error: Error): void {
   parentPort?.postMessage({
     type: 'error',
     workerId,
-    error: error.message
+    error: error instanceof Error ? error.message : String(error)
   });
 }
 

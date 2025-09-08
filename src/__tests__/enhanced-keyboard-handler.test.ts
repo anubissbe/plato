@@ -20,7 +20,7 @@ describe('Enhanced KeyboardHandler Tests', () => {
 
   describe('Multi-Key Sequence Handling', () => {
     test('should register keyboard shortcuts', () => {
-      const handler = jest.fn();
+      const handler = jest.fn() as jest.MockedFunction<() => void>;
       keyboardManager.register({
         id: 'test-shortcut',
         name: 'Test Shortcut',
@@ -34,7 +34,7 @@ describe('Enhanced KeyboardHandler Tests', () => {
     });
 
     test('should handle Ctrl+1 key press', () => {
-      const handler = jest.fn();
+      const handler = jest.fn() as jest.MockedFunction<() => void>;
       keyboardManager.register({
         id: 'ctrl-1',
         name: 'Ctrl+1',
@@ -49,11 +49,11 @@ describe('Enhanced KeyboardHandler Tests', () => {
       };
 
       keyboardManager.handleKeyPress(event);
-      expect(handler).toHaveBeenCalledWith(event);
+      expect(handler).toHaveBeenCalledWith();
     });
 
     test('should handle function keys', () => {
-      const handler = jest.fn();
+      const handler = jest.fn() as jest.MockedFunction<() => void>;
       keyboardManager.register({
         id: 'f1-help',
         name: 'F1 Help',
@@ -67,11 +67,11 @@ describe('Enhanced KeyboardHandler Tests', () => {
       };
 
       keyboardManager.handleKeyPress(event);
-      expect(handler).toHaveBeenCalledWith(event);
+      expect(handler).toHaveBeenCalledWith();
     });
 
     test('should handle Alt key combinations', () => {
-      const handler = jest.fn();
+      const handler = jest.fn() as jest.MockedFunction<() => void>;
       keyboardManager.register({
         id: 'alt-p',
         name: 'Alt+P',
@@ -86,15 +86,15 @@ describe('Enhanced KeyboardHandler Tests', () => {
       };
 
       keyboardManager.handleKeyPress(event);
-      expect(handler).toHaveBeenCalledWith(event);
+      expect(handler).toHaveBeenCalledWith();
     });
 
     test('should handle key sequences with timing', async () => {
-      const handler = jest.fn();
+      const handler = jest.fn() as jest.MockedFunction<() => void>;
       keyboardManager.register({
         id: 'sequence',
         name: 'Sequence',
-        binding: { sequence: ['Ctrl+K', 'Ctrl+S'] },
+        binding: { key: 'sequence', sequence: ['Ctrl+K', 'Ctrl+S'] },
         handler,
       });
 
@@ -107,7 +107,7 @@ describe('Enhanced KeyboardHandler Tests', () => {
 
   describe('Customizable Key Bindings', () => {
     test('should support multiple bindings for same action', () => {
-      const handler = jest.fn();
+      const handler = jest.fn() as jest.MockedFunction<() => void>;
       keyboardManager.register({
         id: 'multi-binding',
         name: 'Multi Binding',
@@ -124,8 +124,8 @@ describe('Enhanced KeyboardHandler Tests', () => {
     });
 
     test('should detect binding conflicts', () => {
-      const handler1 = jest.fn();
-      const handler2 = jest.fn();
+      const handler1 = jest.fn() as jest.MockedFunction<() => void>;
+      const handler2 = jest.fn() as jest.MockedFunction<() => void>;
 
       keyboardManager.register({
         id: 'shortcut1',
@@ -135,7 +135,7 @@ describe('Enhanced KeyboardHandler Tests', () => {
       });
 
       // Registering same binding should warn about conflict
-      const consoleSpy = jest.spyOn(console, 'warn').mockImplementation();
+      const consoleSpy = jest.spyOn(console, 'warn').mockImplementation(() => {});
       
       keyboardManager.register({
         id: 'shortcut2',
@@ -149,8 +149,8 @@ describe('Enhanced KeyboardHandler Tests', () => {
     });
 
     test('should support conditional bindings', () => {
-      const handler = jest.fn();
-      const condition = jest.fn().mockReturnValue(true);
+      const handler = jest.fn() as jest.MockedFunction<() => void>;
+      const condition = jest.fn() as jest.MockedFunction<() => boolean>; condition.mockReturnValue(true);
 
       keyboardManager.register({
         id: 'conditional',
@@ -171,8 +171,8 @@ describe('Enhanced KeyboardHandler Tests', () => {
     });
 
     test('should skip disabled conditional bindings', () => {
-      const handler = jest.fn();
-      const condition = jest.fn().mockReturnValue(false);
+      const handler = jest.fn() as jest.MockedFunction<() => void>;
+      const condition = jest.fn() as jest.MockedFunction<() => boolean>; condition.mockReturnValue(false);
 
       keyboardManager.register({
         id: 'disabled',
@@ -293,7 +293,7 @@ describe('Enhanced KeyboardHandler Tests', () => {
 
   describe('Shortcut Categories', () => {
     test('should group shortcuts by category', () => {
-      const handler = jest.fn();
+      const handler = jest.fn() as jest.MockedFunction<() => void>;
       
       keyboardManager.register({
         id: 'panel-1',
@@ -321,7 +321,7 @@ describe('Enhanced KeyboardHandler Tests', () => {
 
   describe('Shortcut Scopes', () => {
     test('should respect scope restrictions', () => {
-      const handler = jest.fn();
+      const handler = jest.fn() as jest.MockedFunction<() => void>;
       
       keyboardManager.register({
         id: 'modal-only',
@@ -349,7 +349,7 @@ describe('Enhanced KeyboardHandler Tests', () => {
 
   describe('Performance', () => {
     test('should handle rapid key presses', () => {
-      const handler = jest.fn();
+      const handler = jest.fn() as jest.MockedFunction<() => void>;
       keyboardManager.register({
         id: 'rapid',
         name: 'Rapid',
@@ -379,7 +379,7 @@ describe('Enhanced KeyboardHandler Tests', () => {
           id: `shortcut-${i}`,
           name: `Shortcut ${i}`,
           binding: { key: String(i % 10), modifiers: { ctrl: i % 2 === 0 } },
-          handler: jest.fn(),
+          handler: jest.fn() as jest.MockedFunction<() => void>,
         });
       }
 
@@ -393,7 +393,7 @@ describe('Enhanced KeyboardHandler Tests', () => {
 
   describe('Enable/Disable Functionality', () => {
     test('should disable shortcut handling', () => {
-      const handler = jest.fn();
+      const handler = jest.fn() as jest.MockedFunction<() => void>;
       keyboardManager.register({
         id: 'test',
         name: 'Test',

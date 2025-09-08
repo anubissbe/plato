@@ -143,7 +143,9 @@ class CoordinateCache {
     if (this.cache.size >= this.maxSize) {
       // Remove oldest entries
       const firstKey = this.cache.keys().next().value;
-      this.cache.delete(firstKey);
+      if (firstKey !== undefined) {
+        this.cache.delete(firstKey);
+      }
     }
     
     this.cache.set(key, { ...coordinates });
@@ -171,7 +173,7 @@ class CoordinateCache {
  */
 class FrameBatcher {
   private eventBuffer: MouseEvent[] = [];
-  private animationFrame: number | null = null;
+  private animationFrame: NodeJS.Timeout | null = null;
   private readonly targetFPS: number;
   private readonly frameInterval: number;
   private lastFrameTime = 0;
